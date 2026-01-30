@@ -6,10 +6,10 @@ PREFIX ?= /usr/local
 BINDIR = $(PREFIX)/bin
 BINARY = redway
 GO = go
-GOFLAGS = -ldflags="-s -w"
+GOFLAGS = -ldflags "-s -w"
 
 # Build flags
-LDFLAGS = -ldflags="-s -w"
+LDFLAGS = -ldflags "-s -w"
 
 # Linux check helper
 check-linux:

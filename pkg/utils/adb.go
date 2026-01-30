@@ -2,7 +2,7 @@ package utils
 
 import (
 	"fmt"
-	
+
 	"redway/pkg/container"
 )
 
@@ -18,14 +18,14 @@ func NewAdbManager() *AdbManager {
 
 func (a *AdbManager) ShowConnection() error {
 	if !a.manager.IsRunning() {
-		return fmt.Errorf("container is not running. Start it with 'redway start'")
+		return fmt.Errorf("The container is not running. Start it with 'redway start'")
 	}
-	
+
 	ip, err := a.manager.GetIP()
 	if err != nil {
-		return fmt.Errorf("failed to get container IP: %v", err)
+		return fmt.Errorf("Failed to get container IP: %v", err)
 	}
-	
+
 	fmt.Println("ADB Connection Information:")
 	fmt.Println("===========================")
 	fmt.Printf("\nConnect to Android container:\n")
@@ -35,6 +35,6 @@ func (a *AdbManager) ShowConnection() error {
 	fmt.Printf("  adb install app.apk    # Install APK\n")
 	fmt.Printf("  adb logcat             # View logs\n")
 	fmt.Printf("  adb devices            # List connected devices\n")
-	
+
 	return nil
 }

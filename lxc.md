@@ -1,4 +1,4 @@
-# Deploy Redroid via LXC
+# Deploy via LXC
 
 This guide shows how to manually deploy a Redroid container using LXC.
 For automated deployment, use the `redway` tool instead.

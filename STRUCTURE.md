@@ -8,6 +8,7 @@ This document describes the organization of the Redway project source code.
 
 ## Directory Layout
 
+```
 redway/
 ├── main.go                  # Application entry point
 ├── go.mod                   # Go module definition
@@ -31,6 +32,7 @@ redway/
 │       ├── shell.go         # Container shell access
 │       ├── status.go        # Status reporting
 │       └── log.go           # Log file viewing
+```
 
 ## Package Descriptions
 

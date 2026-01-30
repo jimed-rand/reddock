@@ -1,108 +1,59 @@
 # Deploy via LXC
 
-This guide shows how to manually deploy a Redroid container using LXC.
-For automated deployment, use the `redway` tool instead.
+This guide provides a streamlined workflow for manually deploying Redroid using native LXC. For automated deployment, use the [redway](https://github.com/jimed-rand/redway) tool.
 
-## Prerequisites by Distribution
+## Prerequisites
 
-### Ubuntu/Debian
+Ensure your distribution has the required packages installed.
 
-```bash
-# Install kernel module support (if needed)
-sudo apt install linux-modules-extra-$(uname -r)
+| Distribution | Command |
+| --- | --- |
+| **Ubuntu/Debian** | `sudo apt install lxc-utils skopeo umoci jq linux-modules-extra-$(uname -r)` |
+| **Arch Linux** | `sudo pacman -S lxc skopeo umoci jq linux-headers` |
+| **Fedora** | `sudo dnf install lxc lxc-templates skopeo umoci jq kernel-modules-extra` |
+| **openSUSE** | `sudo zypper install lxc skopeo umoci jq` |
+| **Gentoo** | `emerge -av app-containers/lxc app-containers/skopeo app-containers/umoci app-misc/jq` |
 
-# Install LXC and OCI tools
-sudo apt install lxc-utils skopeo umoci jq
-```
+### Step 1: Environment Preparation
 
-### Arch Linux
-
-```bash
-# Install all required packages
-sudo pacman -S linux-headers lxc skopeo umoci jq
-```
-
-### Fedora
+> [!IMPORTANT]
+> Redroid requires **binder** support. Check if it's available or load the module:
 
 ```bash
-# Install kernel modules and LXC tools
-sudo dnf install kernel-modules-extra lxc lxc-templates skopeo umoci jq
-```
+# Check for binder support
+ls -la /dev/binder* /dev/binderfs 2>/dev/null || sudo modprobe binder_linux devices="binder,hwbinder,vndbinder"
 
-### openSUSE
-
-```bash
-sudo zypper install lxc skopeo umoci jq
-```
-
-### Gentoo
-
-```bash
-emerge -av app-containers/lxc app-containers/skopeo app-containers/umoci app-misc/jq
-```
-
-## Step 1: Verify Binder Support
-
-Redroid requires binder support. Different distributions handle this differently:
-
-```bash
-# Check for binder support (any of these indicates support)
-ls -la /dev/binder* /dev/binderfs 2>/dev/null
-lsmod | grep binder
-cat /proc/filesystems | grep binder
-```
-
-### If binder is not found
-
-```bash
-# Try loading modules (common on Ubuntu/Debian/Fedora)
-sudo modprobe binder_linux devices="binder,hwbinder,vndbinder"
-
-# Verify
-lsmod | grep binder
-```
-
-> **Note:** Some distributions (like newer Arch, some custom kernels) have binder support built-in or use binderfs. The container will work as long as /dev/binder* devices are available.
-
-## Step 2: Verify LXC Networking
-
-```bash
-# Check if lxc-net service is running (systemd)
-sudo systemctl status lxc-net
-
-# If not running
-sudo systemctl start lxc-net
-sudo systemctl enable lxc-net
-
-# Verify bridge exists
+# Verify LXC networking is active
+sudo systemctl enable --now lxc-net
 ip link show lxcbr0
 ```
 
-## Step 3: Adjust OCI Template
+> [!TIP]
+> If you're on a newer kernel using `binderfs`, ensure it's mounted or that the devices are present in `/dev/`.
+
+### Step 2: Create Container
+
+First, patch the OCI template for better compatibility, then create the container:
 
 ```bash
-# Fix OCI template for compatibility
+# Fix OCI template compatibility
 sudo sed -i 's/set -eu/set -u/g' /usr/share/lxc/templates/lxc-oci
-```
 
-## Step 4: Create Redroid Container
-
-```bash
-# Create container from OCI image
-# Available Android versions: 11.0.0, 12.0.0, 13.0.0, 14.0.0, 15.0.0, 16.0.0
+# Create container (Android 14 example)
+# Versions available: 11.0.0 through 16.0.0
 sudo lxc-create -n redroid -t oci -- -u docker://redroid/redroid:14.0.0_64only-latest
 ```
 
-## Step 5: Configure Container
+### Step 3: Configure & Fixes
+
+Merge persistence, Redroid settings, and networking workarounds into the container configuration:
 
 ```bash
-# Create data directory for persistence
+# Create data directory
 mkdir -p $HOME/data-redroid
 
-# Remove problematic lxc.include line
+# Clean and configure
 sudo sed -i '/lxc.include/d' /var/lib/lxc/redroid/config
-
-# Add Redroid-specific configuration
 sudo tee -a /var/lib/lxc/redroid/config <<EOF
 ### Redroid Configuration
 lxc.init.cmd = /init androidboot.hardware=redroid androidboot.redroid_gpu_mode=guest
@@ -111,110 +62,59 @@ lxc.autodev = 1
 lxc.autodev.tmpfs.size = 25000000
 lxc.mount.entry = $HOME/data-redroid data none bind 0 0
 EOF
-```
 
-## Step 6: Apply Networking Workaround
-
-```bash
-# Remove ipconfigstore to fix networking issues
+# Networking workaround: Remove ipconfigstore
 sudo rm -f /var/lib/lxc/redroid/rootfs/vendor/bin/ipconfigstore
 ```
 
-## Step 7: Start Container
+### Step 4: Launch & Connect
+
+Start the container and connect via ADB:
 
 ```bash
-# Start with debug logging
-sudo lxc-start -l debug -o redroid.log -n redroid
+# Start container
+sudo lxc-start -n redroid -l debug -o redroid.log
 
-# Check container status
-sudo lxc-info redroid
-```
-
-## Step 8: Connect via ADB
-
-```bash
-# Get container IP
+# Get IP and Wait for boot (approx 30-60s)
 REDROID_IP=$(sudo lxc-info redroid -i | awk '{print $2}')
-
-# Connect ADB
 adb connect $REDROID_IP:5555
-
-# Verify connection
-adb devices
 ```
 
-## Alternative: Direct Shell Access
-
-```bash
-# Get container PID and enter shell
-sudo nsenter -t $(sudo lxc-info redroid -p | awk '{print $2}') -a sh
-```
+---
 
 ## Container Management
 
-```bash
-# Stop container
-sudo lxc-stop -k -n redroid
+| Action | Command |
+|--------|---------|
+| **Status** | `sudo lxc-info redroid` |
+| **Stop** | `sudo lxc-stop -k -n redroid` |
+| **Restart** | `sudo lxc-stop -k -n redroid && sudo lxc-start -n redroid` |
+| **Shell** | `sudo nsenter -t $(sudo lxc-info redroid -p \| awk '{print $2}') -a sh` |
+| **Logs** | `tail -f redroid.log` |
+| **Delete** | `sudo lxc-destroy -n redroid` |
 
-# Restart container
-sudo lxc-stop -k -n redroid && sudo lxc-start -n redroid
+## GPU Acceleration
 
-# Remove container
-sudo lxc-destroy -n redroid
-
-# List all containers
-sudo lxc-ls -f
-```
-
-## GPU Mode Options
-
-| Mode | Description |
-|------|-------------|
-| `guest` | Software rendering (default, most compatible) |
-| `host` | GPU passthrough (requires compatible hardware) |
+To enable hardware acceleration, change `redroid_gpu_mode` to `host`:
 
 ```bash
-# Change to host GPU mode
 sudo sed -i 's/redroid_gpu_mode=guest/redroid_gpu_mode=host/' /var/lib/lxc/redroid/config
 ```
 
+> [!NOTE]
+> `host` mode requires compatible GPU drivers (Mesa/Intel/AMD recommended).
+
 ## Troubleshooting
 
-### Container won't start
+> [!CAUTION]
+> **Container fails to start?**
+> Check `redroid.log` and verify binder devices: `ls -la /dev/binder*`.
 
-```bash
-# Check logs
-cat redroid.log
+> [!WARNING]
+> **No Network?**
+> Ensure `lxcbr0` exists: `ip link show lxcbr0`. Restart if needed: `sudo systemctl restart lxc-net`.
 
-# Verify binder support
-ls -la /dev/binder* /dev/binderfs 2>/dev/null
-```
+> [!TIP]
+> **ADB Connection Refused?**
+> Android takes time to boot. Wait at least 60 seconds before connecting.
 
-### No binder device
-
-```bash
-# Try loading modules
-sudo modprobe binder_linux devices="binder,hwbinder,vndbinder"
-sudo modprobe ashmem_linux
-
-# If modules don't exist, check if kernel has built-in support
-cat /proc/filesystems | grep binder
-```
-
-### No network connectivity
-
-```bash
-# Restart LXC networking
-sudo systemctl restart lxc-net
-
-# Verify bridge
-ip link show lxcbr0
-```
-
-### ADB connection refused
-
-```bash
-# Wait for Android to fully boot (30-60 seconds)
-sleep 60
-adb connect $REDROID_IP:5555
-```

@@ -2,9 +2,13 @@
 
 This document describes the organization of the Redway project source code.
 
+> [!WARNING]
+> **Technical Documentation Notice:** This information is strictly reserved for developers, system administrators, and technical maintenance personnel. The contents of this document detail the internal structural organization and architectural logic of the Redway project, which are not relevant to the typical end-user experience. It is imperative to understand that the directory layouts, build scripts, and module definitions described below are critical components of the software's infrastructure.
+
+Misinterpretation or unauthorized modification of these structural elements by non-technical users could result in significant system instability, broken dependencies, or complete failure of the build environment. This document serves as a comprehensive roadmap for those responsible for the ongoing development, debugging, and deployment of the application. It provides the necessary context for navigating the codebase efficiently and maintaining the integrity of the project's design patterns. End-users seeking assistance with application functionality should refer to the official user manual rather than this internal technical specification.
+
 ## Directory Layout
 
-```
 redway/
 ├── main.go                  # Application entry point
 ├── go.mod                   # Go module definition
@@ -12,24 +16,22 @@ redway/
 ├── Makefile                 # Build automation
 │
 ├── cmd/                     # Command-line interface
-│   ├── command.go          # Command dispatcher and routing
-│   └── usage.go            # Help text and usage information
+│   ├── command.go           # Command dispatcher and routing
+│   └── usage.go             # Help text and usage information
 │
 ├── pkg/                     # Core application packages
-   ├── config/             # Configuration management
-   │   └── config.go       # JSON config read/write, defaults
-   │
-   ├── container/          # Container lifecycle management
-   │   ├── initializer.go  # Container initialization workflow
-   │   └── manager.go      # Start/stop/restart/remove operations
-   │
-   └── utils/              # Utility functions and helpers
-       ├── adb.go          # ADB connection information
-       ├── shell.go        # Container shell access
-       ├── status.go       # Status reporting
-       └── log.go          # Log file viewing
-
-```
+│   ├── config/              # Configuration management
+│   │   └── config.go        # JSON config read/write, defaults
+│   │
+│   ├── container/           # Container lifecycle management
+│   │   ├── initializer.go   # Container initialization workflow
+│   │   └── manager.go       # Start/stop/restart/remove operations
+│   │
+│   └── utils/               # Utility functions and helpers
+│       ├── adb.go           # ADB connection information
+│       ├── shell.go         # Container shell access
+│       ├── status.go        # Status reporting
+│       └── log.go           # Log file viewing
 
 ## Package Descriptions
 
@@ -380,8 +382,6 @@ Easy to add:
 
 ### Command Output
 
-- Success messages start with ✓
-- Warnings start with ⚠
 - Errors go to stderr
 - Info messages to stdout
 

@@ -5,7 +5,7 @@ import (
 )
 
 func PrintUsage() {
-	fmt.Println("Redway 1.0.0 - Redroid Container Manager")
+	fmt.Println("Redway - Redroid Container Manager")
 	fmt.Println("\nUsage: redway [command] [options]")
 	fmt.Println("\nCommands:")
 	fmt.Println("  init [image]         Initialize redroid container")
@@ -20,10 +20,10 @@ func PrintUsage() {
 	fmt.Println("  log                  Show container logs")
 	fmt.Println("\nExamples:")
 	fmt.Println("  redway init                                              # Use default redroid image")
-	fmt.Println("  redway init docker://redroid/redroid:12.0.0_64only-latest  # Use specific OCI image")
+	fmt.Println("  redway init docker://redroid/redroid:16.0.0_64only-latest  # Use specific OCI image")
 	fmt.Println("  redway start")
 	fmt.Println("  redway adb-connect")
 	fmt.Println("  redway shell")
-	fmt.Println("\nDefault image: docker://redroid/redroid:13.0.0_64only-latest")
+	fmt.Println("\nDefault image: docker://redroid/redroid:16.0.0_64only-latest")
 	fmt.Println("\nNote: Images are fetched from OCI registries via skopeo and converted to LXC containers.")
 }

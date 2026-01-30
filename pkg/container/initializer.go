@@ -87,16 +87,16 @@ func (i *Initializer) checkKernelModules() error {
 	// Ashmem is no longer required for modern redroid versions (uses memfd)
 
 	if binderFound {
-		fmt.Println("    Binder support detected")
+		fmt.Println("Binder support (binderfs/binder module) detected")
 		return nil
 	}
 
 	// Advisory warning only - don't fail, let user proceed
-	fmt.Println("    Binder support not detected")
-	fmt.Println("      This may be normal if your kernel has built-in support.")
-	fmt.Println("      If container fails to start, try loading modules:")
-	fmt.Println("        sudo modprobe binder_linux devices=\"binder,hwbinder,vndbinder\"")
-	fmt.Println("      See README for distro-specific instructions.")
+	fmt.Println("Binder support (binderfs/binder module) not detected")
+	fmt.Println("This may be normal if your kernel has built-in support.")
+	fmt.Println("If container fails to start, try loading modules:")
+	fmt.Println("  sudo modprobe binder_linux devices=\"binder,hwbinder,vndbinder\"")
+	fmt.Println("See README for distro-specific instructions.")
 
 	return nil // Continue anyway - let container startup reveal actual issues
 }
@@ -110,7 +110,7 @@ func (i *Initializer) checkLXCTools() error {
 		}
 	}
 
-	fmt.Println("    LXC tools available")
+	fmt.Println("LXC tools available")
 	return nil
 }
 
@@ -129,7 +129,7 @@ func (i *Initializer) checkLXCNetworking() error {
 	}
 
 	// Warning only, don't fail - some setups use different networking
-	fmt.Println("    LXC networking not detected. Container may need manual network setup.")
+	fmt.Println("    LXC networking isn't detected. Container may need manual network setup.")
 	fmt.Println("      Try: sudo systemctl start lxc-net")
 	return nil
 }
@@ -138,22 +138,22 @@ func (i *Initializer) adjustOCITemplate() error {
 	templatePath := "/usr/share/lxc/templates/lxc-oci"
 
 	if _, err := os.Stat(templatePath); os.IsNotExist(err) {
-		fmt.Println("    Note: lxc-oci template not found, skipping adjustment")
+		fmt.Println("    Note: lxc-oci templates not found, skipping adjustment")
 		return nil
 	}
 
 	content, err := os.ReadFile(templatePath)
 	if err != nil {
-		return fmt.Errorf("failed to read template: %v", err)
+		return fmt.Errorf("Failed to read template: %v", err)
 	}
 
 	modified := strings.ReplaceAll(string(content), "set -eu", "set -u")
 
 	if err := os.WriteFile(templatePath, []byte(modified), 0755); err != nil {
-		return fmt.Errorf("failed to write template: %v", err)
+		return fmt.Errorf("Failed to write template: %v", err)
 	}
 
-	fmt.Println("    OCI template adjusted")
+	fmt.Println("OCI template adjusted")
 	return nil
 }
 
@@ -171,7 +171,7 @@ func (i *Initializer) checkRequiredTools() error {
 		return fmt.Errorf("missing required tools: %s. Please install them", strings.Join(missing, ", "))
 	}
 
-	fmt.Println("    Required tools installed")
+	fmt.Println("Required tools installed")
 	return nil
 }
 
@@ -179,11 +179,11 @@ func (i *Initializer) createContainer() error {
 	containerPath := i.config.GetContainerPath()
 
 	if _, err := os.Stat(containerPath); err == nil {
-		fmt.Println("    Container already exists")
+		fmt.Println("Container already exists")
 		return nil
 	}
 
-	fmt.Printf("    Creating LXC container from %s...\n", i.image)
+	fmt.Printf("Creating LXC container from %s...\n", i.image)
 
 	cmd := exec.Command("lxc-create",
 		"-n", i.config.ContainerName,
@@ -198,7 +198,7 @@ func (i *Initializer) createContainer() error {
 		return fmt.Errorf("failed to create container: %v", err)
 	}
 
-	fmt.Println("    Container created")
+	fmt.Println("Container created")
 	return nil
 }
 
@@ -207,7 +207,7 @@ func (i *Initializer) createDataDirectory() error {
 		return fmt.Errorf("failed to create data directory: %v", err)
 	}
 
-	fmt.Printf("    Data directory: %s\n", i.config.DataPath)
+	fmt.Printf("Data directory: %s\n", i.config.DataPath)
 	return nil
 }
 
@@ -245,7 +245,7 @@ lxc.mount.entry = %s data none bind 0 0
 		return fmt.Errorf("failed to write config: %v", err)
 	}
 
-	fmt.Println("    Container config adjusted")
+	fmt.Println("Container config adjusted")
 	return nil
 }
 
@@ -254,12 +254,12 @@ func (i *Initializer) applyNetworkingWorkaround() error {
 
 	if _, err := os.Stat(workaroundPath); err == nil {
 		if err := os.Remove(workaroundPath); err != nil {
-			fmt.Printf("    Warning: Could not remove ipconfigstore: %v\n", err)
+			fmt.Printf("Warning: Could not remove ipconfigstore: %v\n", err)
 		} else {
-			fmt.Println("    Networking workaround applied")
+			fmt.Println("Networking workaround applied")
 		}
 	} else {
-		fmt.Println("    Networking workaround not needed")
+		fmt.Println("Networking workaround not needed")
 	}
 
 	return nil

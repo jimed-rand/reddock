@@ -107,7 +107,7 @@ func (m *Manager) Remove() error {
 
 	configPath := config.GetConfigPath()
 	if err := os.Remove(configPath); err != nil {
-		fmt.Printf("Warning: Could not remove config: %v\n", err)
+		fmt.Printf("Warning: Could not remove the config: %v\n", err)
 	}
 
 	fmt.Println("The container removed successfully")

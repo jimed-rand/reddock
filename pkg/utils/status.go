@@ -38,7 +38,7 @@ func (s *StatusManager) Show() error {
 	fmt.Printf("Initialized: %v\n", cont.Initialized)
 
 	if !cont.Initialized {
-		fmt.Println("\nThe container is not initialized. Run 'redway init %s' first.", cont.Name)
+		fmt.Printf("\nThe container is not initialized. Run 'redway init %s' first.\n", cont.Name)
 		return nil
 	}
 

@@ -67,7 +67,7 @@ func (ai *AddonInjector) InjectToContainer(containerName, addonName, version, ar
 
 	fmt.Printf("\n=== Injecting %s to container %s ===\n", addon.Name(), containerName)
 
-	if err := ai.checkContainerRunning(containerName); err != nil {
+	if _, err := ai.checkContainerExists(containerName); err != nil {
 		return err
 	}
 
@@ -93,8 +93,12 @@ func (ai *AddonInjector) InjectToContainer(containerName, addonName, version, ar
 	}
 
 	fmt.Printf("Setting permissions...\n")
-	if err := ai.setPermissions(containerName, addonName); err != nil {
-		fmt.Printf("Warning: Failed to set some permissions: %v\n", err)
+	if ai.isContainerRunning(containerName) {
+		if err := ai.SetPermissions(containerName, addonName); err != nil {
+			fmt.Printf("Warning: Failed to set some permissions: %v\n", err)
+		}
+	} else {
+		fmt.Printf("Container is not running. Permissions will be applied when you start the container.\n")
 	}
 
 	// Update container config
@@ -123,23 +127,23 @@ func (ai *AddonInjector) InjectToContainer(containerName, addonName, version, ar
 	return nil
 }
 
-func (ai *AddonInjector) checkContainerRunning(containerName string) error {
-	cmd := exec.Command("docker", "inspect", "-f", "{{.State.Status}}", containerName)
+func (ai *AddonInjector) checkContainerExists(containerName string) (string, error) {
+	runtime := DetectRuntime()
+	cmd := exec.Command(runtime, "inspect", "-f", "{{.State.Status}}", containerName)
 	output, err := cmd.Output()
 	if err != nil {
-		cmd = exec.Command("podman", "inspect", "-f", "{{.State.Status}}", containerName)
-		output, err = cmd.Output()
-		if err != nil {
-			return fmt.Errorf("Container '%s' not found", containerName)
-		}
+		return "", fmt.Errorf("Container '%s' not found", containerName)
 	}
 
-	status := strings.TrimSpace(string(output))
-	if status != "running" {
-		return fmt.Errorf("Container '%s' is not running (status: %s). Please start it first", containerName, status)
-	}
+	return strings.TrimSpace(string(output)), nil
+}
 
-	return nil
+func (ai *AddonInjector) isContainerRunning(containerName string) bool {
+	status, err := ai.checkContainerExists(containerName)
+	if err != nil {
+		return false
+	}
+	return status == "running"
 }
 
 func (ai *AddonInjector) copyToContainer(containerName, addonDir string) error {
@@ -170,7 +174,7 @@ func (ai *AddonInjector) copyToContainer(containerName, addonDir string) error {
 	return nil
 }
 
-func (ai *AddonInjector) setPermissions(containerName, addonName string) error {
+func (ai *AddonInjector) SetPermissions(containerName, addonName string) error {
 	runtime := DetectRuntime()
 
 	var commands [][]string
@@ -209,7 +213,7 @@ func (ai *AddonInjector) setPermissions(containerName, addonName string) error {
 func (ai *AddonInjector) InjectMultiple(containerName string, addons []AddonRequest) error {
 	fmt.Printf("\n=== Injecting %d addons to container %s ===\n", len(addons), containerName)
 
-	if err := ai.checkContainerRunning(containerName); err != nil {
+	if _, err := ai.checkContainerExists(containerName); err != nil {
 		return err
 	}
 

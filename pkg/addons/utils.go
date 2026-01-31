@@ -77,7 +77,7 @@ func copyFile(src, dst string) error {
 
 // CheckDependencies checks if required system tools are installed
 func CheckDependencies() error {
-	deps := []string{"tar", "lzip", "xz"}
+	deps := []string{"lzip"}
 	var missing []string
 
 	for _, dep := range deps {
@@ -87,7 +87,7 @@ func CheckDependencies() error {
 	}
 
 	if len(missing) > 0 {
-		return fmt.Errorf("Missing required dependencies: %v. Please install lzip, tar, and xz-utils on your Linux distribution", missing)
+		return fmt.Errorf("Missing required dependencies: %v. Please install lzip on your Linux distribution", missing)
 	}
 
 	return nil
@@ -123,10 +123,7 @@ func downloadFile(url, filepath string) error {
 // DetectRuntime checks if podman or docker is available and running
 func DetectRuntime() string {
 	if _, err := exec.LookPath("podman"); err == nil {
-		cmd := exec.Command("podman", "ps")
-		if err := cmd.Run(); err == nil {
-			return "podman"
-		}
+		return "podman"
 	}
 	return "docker"
 }

@@ -119,6 +119,16 @@ func (m *Manager) Start(verbose bool) error {
 	}
 
 	fmt.Println("The Container started successfully")
+
+	// Apply permissions for addons if container is running
+	if m.IsRunning() {
+		injector := addons.NewAddonInjector()
+		for _, addonName := range container.Addons {
+			if err := injector.SetPermissions(container.Name, addonName); err != nil {
+				fmt.Printf("Warning: Failed to set permissions for addon %s: %v\n", addonName, err)
+			}
+		}
+	}
 	if verbose {
 		fmt.Println("Showing logs (Press Ctrl+C to stop)...")
 		logCmd := m.runtime.Command("logs", "-f", container.Name)

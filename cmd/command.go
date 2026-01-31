@@ -20,6 +20,10 @@ func NewCommand(name string, args []string) *Command {
 	}
 }
 
+func CheckRoot() error {
+	return container.CheckRoot()
+}
+
 func (c *Command) Execute() error {
 	switch c.Name {
 	case "init":
@@ -44,8 +48,10 @@ func (c *Command) Execute() error {
 		return c.executeLog()
 	case "addons":
 		return c.executeAddons()
+	case "prune":
+		return c.executePrune()
 	default:
-		return fmt.Errorf("unknown command: %s", c.Name)
+		return fmt.Errorf("Unknown command: %s", c.Name)
 	}
 }
 
@@ -214,6 +220,11 @@ func (c *Command) executeLog() error {
 	return logger.Show()
 }
 
+func (c *Command) executePrune() error {
+	pruner := container.NewPruner()
+	return pruner.Prune()
+}
+
 func PrintUsage() {
 	fmt.Println("Reddock")
 	fmt.Println("\nUsage: reddock [command] [options]")
@@ -229,6 +240,7 @@ func PrintUsage() {
 	fmt.Println("  list                           List all Reddock containers")
 	fmt.Println("  log <name>                     Show container logs (name required)")
 	fmt.Println("  addons                         Manage addons (Houdini, NDK, Gapps)")
+	fmt.Println("  prune                          Remove unused images")
 	fmt.Println("\nExamples:")
 	fmt.Println("  sudo reddock init android13")
 	fmt.Println("  sudo reddock start android13 -v")

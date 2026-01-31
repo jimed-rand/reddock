@@ -17,6 +17,7 @@ type Runtime interface {
 	Inspect(containerName string, format string) (string, error)
 	Exists(containerName string) bool
 	IsRunning(containerName string) bool
+	PruneImages() error
 }
 
 type GenericRuntime struct {
@@ -94,4 +95,8 @@ func (r *GenericRuntime) IsRunning(containerName string) bool {
 		return false
 	}
 	return state == "true"
+}
+
+func (r *GenericRuntime) PruneImages() error {
+	return r.Command("image", "prune", "-f").Run()
 }

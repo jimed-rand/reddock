@@ -204,12 +204,12 @@ func (l *LiteGappsAddon) Copy(version, arch, outputDir string) error {
 		return err
 	}
 
-	tarFile := filepath.Join(l.extractTo, "files", "files.tar.xz")
-	fmt.Println("Extracting files.tar.xz...")
+	tarFile := filepath.Join(l.extractTo, "files", "files.tar.lz")
+	fmt.Println("Extracting files.tar.lz...")
 
-	cmd := exec.Command("tar", "-xvf", tarFile, "-C", appUnpackDir)
+	cmd := exec.Command("tar", "--lzip", "-xvf", tarFile, "-C", appUnpackDir)
 	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("Failed to extract tar.xz: %v", err)
+		return fmt.Errorf("Failed to extract tar.lz: %v", err)
 	}
 
 	apiLevel := l.apiLevelMap[version]

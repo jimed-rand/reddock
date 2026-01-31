@@ -230,5 +230,5 @@ func PrintUsage() {
 	fmt.Println("  reddock init android13")
 	fmt.Println("  reddock start android13 -v")
 	fmt.Println("  reddock remove android13 --all")
-	fmt.Println("\nIf you're not entering root, you need to add the sudo firsts."
+	fmt.Println("\nIf you're not entering root, you need to add the sudo firsts.")
 }

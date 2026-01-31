@@ -12,6 +12,7 @@ import (
 type Initializer struct {
 	config    *config.Config
 	container *config.Container
+	runtime   Runtime
 }
 
 func NewInitializer(containerName, image string) *Initializer {
@@ -19,13 +20,21 @@ func NewInitializer(containerName, image string) *Initializer {
 
 	container := cfg.GetContainer(containerName)
 	if container == nil {
+		// Find next available port
+		port := 5555
+		for _, c := range cfg.Containers {
+			if c.Port >= port {
+				port = c.Port + 1
+			}
+		}
+
 		container = &config.Container{
 			Name:        containerName,
 			ImageURL:    image,
 			DataPath:    config.GetDefaultDataPath(containerName),
 			LogFile:     containerName + ".log",
 			GPUMode:     config.DefaultGPUMode,
-			Port:        5555, // Default ADB port
+			Port:        port,
 			Initialized: false,
 		}
 		cfg.AddContainer(container)
@@ -38,6 +47,7 @@ func NewInitializer(containerName, image string) *Initializer {
 	return &Initializer{
 		config:    cfg,
 		container: container,
+		runtime:   NewRuntime(),
 	}
 }
 
@@ -54,7 +64,7 @@ func (i *Initializer) Initialize() error {
 		name string
 		fn   func() error
 	}{
-		{"Checking Docker installation", i.checkDocker},
+		{"Checking Runtime installation", i.checkRuntime},
 		{"Checking kernel modules", i.checkKernelModules},
 		{"Pulling Redroid image", i.pullImage},
 		{"Creating data directory", i.createDataDirectory},
@@ -82,10 +92,11 @@ func (i *Initializer) Initialize() error {
 	return nil
 }
 
-func (i *Initializer) checkDocker() error {
-	if _, err := exec.LookPath("docker"); err != nil {
-		return fmt.Errorf("docker not found. Please install Docker")
+func (i *Initializer) checkRuntime() error {
+	if !i.runtime.IsInstalled() {
+		return fmt.Errorf("%s not found. Please install Docker or Podman", i.runtime.Name())
 	}
+	fmt.Printf("Using runtime: %s\n", i.runtime.Name())
 	return nil
 }
 
@@ -109,6 +120,7 @@ func (i *Initializer) checkKernelModules() error {
 		fmt.Println("Binder support detected")
 	} else {
 		fmt.Println("Binder support not detected. Attempting to load module...")
+		// Try to load, but don't fail if we can't (might be in container or handled by host)
 		cmd := exec.Command("modprobe", "binder_linux", "devices=binder,hwbinder,vndbinder")
 		if err := cmd.Run(); err != nil {
 			fmt.Printf("Warning: modprobe binder_linux failed: %v\n", err)
@@ -118,28 +130,19 @@ func (i *Initializer) checkKernelModules() error {
 		}
 	}
 
-	// Also check ashmem
-	if _, err := os.Stat("/dev/ashmem"); err != nil {
-		fmt.Println("Ashmem support not detected. Attempting to load module...")
-		cmd := exec.Command("modprobe", "ashmem_linux")
-		if err := cmd.Run(); err != nil {
-			fmt.Printf("Warning: modprobe ashmem_linux failed: %v\n", err)
-		} else {
-			fmt.Println("Ashmem module loaded successfully")
+	// Ashmem check removed as requested
+	/*
+		if _, err := os.Stat("/dev/ashmem"); err != nil {
+			// ...
 		}
-	} else {
-		fmt.Println("Ashmem support detected")
-	}
+	*/
 
 	return nil
 }
 
 func (i *Initializer) pullImage() error {
 	fmt.Printf("Pulling image %s...\n", i.container.ImageURL)
-	cmd := exec.Command("docker", "pull", i.container.ImageURL)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	return cmd.Run()
+	return i.runtime.PullImage(i.container.ImageURL)
 }
 
 func (i *Initializer) createDataDirectory() error {
@@ -170,11 +173,11 @@ func (l *Lister) ListReddockContainers() error {
 	fmt.Printf("%-20s %-40s %-10s\n", "NAME", "IMAGE", "STATUS")
 	fmt.Println(strings.Repeat("-", 70))
 
+	runtime := NewRuntime()
 	for _, c := range containers {
 		status := "Initialized"
-		cmd := exec.Command("docker", "inspect", "-f", "{{.State.Status}}", c.Name)
-		if output, err := cmd.Output(); err == nil {
-			status = strings.TrimSpace(string(output))
+		if s, err := runtime.Inspect(c.Name, "{{.State.Status}}"); err == nil {
+			status = s
 		} else {
 			status = "Stopped"
 		}

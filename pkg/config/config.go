@@ -8,9 +8,30 @@ import (
 )
 
 const (
-	DefaultImageURL = "redroid/redroid:13.0.0_64only-latest"
-	DefaultGPUMode  = "guest"
+	DefaultGPUMode = "guest"
 )
+
+type RedroidImage struct {
+	Name string
+	URL  string
+}
+
+var AvailableImages = []RedroidImage{
+	{"Android 16", "redroid/redroid:16.0.0-latest"},
+	{"Android 16 64bit only", "redroid/redroid:16.0.0_64only-latest"},
+	{"Android 15", "redroid/redroid:15.0.0-latest"},
+	{"Android 15 64bit only", "redroid/redroid:15.0.0_64only-latest"},
+	{"Android 14", "redroid/redroid:14.0.0-latest"},
+	{"Android 14 64bit only", "redroid/redroid:14.0.0_64only-latest"},
+	{"Android 13", "redroid/redroid:13.0.0-latest"},
+	{"Android 13 64bit only", "redroid/redroid:13.0.0_64only-latest"},
+	{"Android 12", "redroid/redroid:12.0.0-latest"},
+	{"Android 12 64bit only", "redroid/redroid:12.0.0_64only-latest"},
+	{"Android 11", "redroid/redroid:11.0.0-latest"},
+	{"Android 10", "redroid/redroid:10.0.0-latest"},
+	{"Android 9", "redroid/redroid:9.0.0-latest"},
+	{"Android 8.1", "redroid/redroid:8.1.0-latest"},
+}
 
 type Container struct {
 	Name        string `json:"name"`

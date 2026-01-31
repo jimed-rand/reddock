@@ -3,9 +3,9 @@ package cmd
 import (
 	"fmt"
 
-	"redway/pkg/config"
-	"redway/pkg/container"
-	"redway/pkg/utils"
+	"reddock/pkg/config"
+	"reddock/pkg/container"
+	"reddock/pkg/utils"
 )
 
 type Command struct {
@@ -22,10 +22,6 @@ func NewCommand(name string, args []string) *Command {
 
 func (c *Command) Execute() error {
 	switch c.Name {
-	case "prepare-lxc":
-		return c.executePrepareLXC()
-	case "unprepare-lxc":
-		return c.executeUnprepareLXC()
 	case "init":
 		return c.executeInit()
 	case "start":
@@ -51,16 +47,6 @@ func (c *Command) Execute() error {
 	}
 }
 
-func (c *Command) executePrepareLXC() error {
-	preparer := container.NewLXCPreparer()
-	return preparer.PrepareLXC()
-}
-
-func (c *Command) executeUnprepareLXC() error {
-	preparer := container.NewLXCPreparer()
-	return preparer.UnprepareLXC()
-}
-
 func (c *Command) executeInit() error {
 	var containerName string
 	var image string
@@ -68,7 +54,7 @@ func (c *Command) executeInit() error {
 	if len(c.Args) > 0 {
 		containerName = c.Args[0]
 	} else {
-		return fmt.Errorf("container name is required. Usage: redway init <container-name> [image-url]")
+		return fmt.Errorf("container name is required. Usage: reddock init <container-name> [image-url]")
 	}
 
 	if len(c.Args) > 1 {
@@ -94,7 +80,7 @@ func (c *Command) executeStart() error {
 	}
 
 	if containerName == "" {
-		return fmt.Errorf("container name is required. Usage: redway start <container-name> [-v]")
+		return fmt.Errorf("container name is required. Usage: reddock start <container-name> [-v]")
 	}
 
 	mgr := container.NewManagerForContainer(containerName)
@@ -107,7 +93,7 @@ func (c *Command) executeStop() error {
 	if len(c.Args) > 0 {
 		containerName = c.Args[0]
 	} else {
-		return fmt.Errorf("container name is required. Usage: redway stop <container-name>")
+		return fmt.Errorf("container name is required. Usage: reddock stop <container-name>")
 	}
 
 	mgr := container.NewManagerForContainer(containerName)
@@ -127,7 +113,7 @@ func (c *Command) executeRestart() error {
 	}
 
 	if containerName == "" {
-		return fmt.Errorf("container name is required. Usage: redway restart <container-name> [-v]")
+		return fmt.Errorf("container name is required. Usage: reddock restart <container-name> [-v]")
 	}
 
 	mgr := container.NewManagerForContainer(containerName)
@@ -140,7 +126,7 @@ func (c *Command) executeStatus() error {
 	if len(c.Args) > 0 {
 		containerName = c.Args[0]
 	} else {
-		return fmt.Errorf("container name is required. Usage: redway status <container-name>")
+		return fmt.Errorf("container name is required. Usage: reddock status <container-name>")
 	}
 
 	status := utils.NewStatusManager(containerName)
@@ -153,7 +139,7 @@ func (c *Command) executeShell() error {
 	if len(c.Args) > 0 {
 		containerName = c.Args[0]
 	} else {
-		return fmt.Errorf("container name is required. Usage: redway shell <container-name>")
+		return fmt.Errorf("container name is required. Usage: reddock shell <container-name>")
 	}
 
 	shell := utils.NewShellManager(containerName)
@@ -166,7 +152,7 @@ func (c *Command) executeAdbConnect() error {
 	if len(c.Args) > 0 {
 		containerName = c.Args[0]
 	} else {
-		return fmt.Errorf("container name is required. Usage: redway adb-connect <container-name>")
+		return fmt.Errorf("container name is required. Usage: reddock adb-connect <container-name>")
 	}
 
 	adb := utils.NewAdbManager(containerName)
@@ -179,7 +165,7 @@ func (c *Command) executeRemove() error {
 	if len(c.Args) > 0 {
 		containerName = c.Args[0]
 	} else {
-		return fmt.Errorf("container name is required. Usage: redway remove <container-name>")
+		return fmt.Errorf("container name is required. Usage: reddock remove <container-name>")
 	}
 
 	mgr := container.NewManagerForContainer(containerName)
@@ -188,7 +174,7 @@ func (c *Command) executeRemove() error {
 
 func (c *Command) executeList() error {
 	lister := container.NewLister()
-	return lister.ListRedwayContainers()
+	return lister.ListReddockContainers()
 }
 
 func (c *Command) executeLog() error {
@@ -197,7 +183,7 @@ func (c *Command) executeLog() error {
 	if len(c.Args) > 0 {
 		containerName = c.Args[0]
 	} else {
-		return fmt.Errorf("container name is required. Usage: redway log <container-name>")
+		return fmt.Errorf("container name is required. Usage: reddock log <container-name>")
 	}
 
 	logger := utils.NewLogManager(containerName)
@@ -205,11 +191,9 @@ func (c *Command) executeLog() error {
 }
 
 func PrintUsage() {
-	fmt.Println("Redway - Redroid Container Manager")
-	fmt.Println("\nUsage: redway [command] [options]")
+	fmt.Println("Reddock - Redroid Container Manager")
+	fmt.Println("\nUsage: reddock [command] [options]")
 	fmt.Println("\nCommands:")
-	fmt.Println("  prepare-lxc                    Prepare LXC system (one-time setup)")
-	fmt.Println("  unprepare-lxc                  Clean up LXC system (reverses prepare-lxc)")
 	fmt.Println("  init <name> [image]            Initialize container (name required)")
 	fmt.Println("  start <name> [-v]              Start container (use -v for foreground/logs)")
 	fmt.Println("  stop <name>                    Stop container (name required)")
@@ -218,10 +202,9 @@ func PrintUsage() {
 	fmt.Println("  shell <name>                   Enter container shell (name required)")
 	fmt.Println("  adb-connect <name>             Show ADB connection command (name required)")
 	fmt.Println("  remove <name>                  Remove container and data (name required)")
-	fmt.Println("  list                           List all Redway containers")
+	fmt.Println("  list                           List all Reddock containers")
 	fmt.Println("  log <name>                     Show container logs (name required)")
 	fmt.Println("\nExamples:")
-	fmt.Println("  sudo redway prepare-lxc")
-	fmt.Println("  sudo redway init android13")
-	fmt.Println("  sudo redway start android13 -v")
+	fmt.Println("  sudo reddock init android13")
+	fmt.Println("  sudo reddock start android13 -v")
 }

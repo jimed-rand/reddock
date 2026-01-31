@@ -6,7 +6,7 @@ import (
 	"os/exec"
 	"strings"
 
-	"redway/pkg/config"
+	"reddock/pkg/config"
 )
 
 type Manager struct {
@@ -48,7 +48,7 @@ func (m *Manager) Start(verbose bool) error {
 	}
 
 	if !container.Initialized {
-		return fmt.Errorf("The container '%s' is not initialized. Run 'redway init %s' first", container.Name, container.Name)
+		return fmt.Errorf("the container '%s' is not initialized. Run 'reddock init %s' first", container.Name, container.Name)
 	}
 
 	if m.IsRunning() {
@@ -56,32 +56,62 @@ func (m *Manager) Start(verbose bool) error {
 		return nil
 	}
 
-	fmt.Printf("Starting the container '%s'...\n", container.Name)
+	// Check if container exists but is stopped
+	cmd := exec.Command("docker", "ps", "-a", "--filter", "name=^"+container.Name+"$", "--format", "{{.Names}}")
+	output, _ := cmd.Output()
+	exists := strings.TrimSpace(string(output)) == container.Name
 
-	logPath := container.LogFile
+	if exists {
+		fmt.Printf("Starting existing container '%s'...\n", container.Name)
+		startCmd := exec.Command("docker", "start", container.Name)
+		if verbose {
+			startCmd.Stdout = os.Stdout
+			startCmd.Stderr = os.Stderr
+		}
+		if err := startCmd.Run(); err != nil {
+			return fmt.Errorf("failed to start existing container: %v", err)
+		}
+	} else {
+		fmt.Printf("Creating and starting new container '%s'...\n", container.Name)
 
-	args := []string{"-n", container.Name, "-l", "debug", "-o", logPath}
-	if verbose {
-		args = append(args, "-F")
-		fmt.Println("Running in foreground mode (Press Ctrl+C to stop)")
-	}
+		// Map GPU mode to redroid param
+		gpuParam := "auto"
+		if container.GPUMode != "" {
+			gpuParam = container.GPUMode
+		}
 
-	cmd := exec.Command("lxc-start", args...)
-	if verbose {
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
-		return cmd.Run()
-	}
+		args := []string{
+			"run", "-itd",
+			"--privileged",
+			"--name", container.Name,
+			"-v", fmt.Sprintf("%s:/data", container.GetDataPath()),
+			"-p", fmt.Sprintf("%d:5555", container.Port),
+			container.ImageURL,
+			"androidboot.redroid_gpu_mode=" + gpuParam,
+		}
 
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("failed to start container: %v", err)
+		runCmd := exec.Command("docker", args...)
+		if verbose {
+			runCmd.Stdout = os.Stdout
+			runCmd.Stderr = os.Stderr
+		}
+		if err := runCmd.Run(); err != nil {
+			return fmt.Errorf("failed to run container: %v", err)
+		}
 	}
 
 	fmt.Println("The container started successfully")
-	fmt.Printf("\nLog file: %s\n", logPath)
+	if verbose {
+		fmt.Println("Showing logs (Press Ctrl+C to stop)...")
+		logCmd := exec.Command("docker", "logs", "-f", container.Name)
+		logCmd.Stdout = os.Stdout
+		logCmd.Stderr = os.Stderr
+		logCmd.Run()
+	}
+
 	fmt.Println("\nNext steps:")
-	fmt.Printf("  redway status %s       # Check container status\n", container.Name)
-	fmt.Printf("  redway adb-connect %s  # Get ADB connection info\n", container.Name)
+	fmt.Printf("  reddock status %s       # Check container status\n", container.Name)
+	fmt.Printf("  reddock adb-connect %s  # Get ADB connection info\n", container.Name)
 
 	return nil
 }
@@ -101,9 +131,7 @@ func (m *Manager) Stop() error {
 	}
 
 	fmt.Printf("Stopping the container '%s'...\n", container.Name)
-
-	cmd := exec.Command("lxc-stop", "-k", "-n", container.Name)
-
+	cmd := exec.Command("docker", "stop", container.Name)
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("failed to stop container: %v", err)
 	}
@@ -113,12 +141,9 @@ func (m *Manager) Stop() error {
 }
 
 func (m *Manager) Restart(verbose bool) error {
-	fmt.Println("Restarting the container...")
-
 	if err := m.Stop(); err != nil {
-		return err
+		fmt.Printf("Warning: Stop failed: %v\n", err)
 	}
-
 	return m.Start(verbose)
 }
 
@@ -131,62 +156,21 @@ func (m *Manager) Remove() error {
 		return err
 	}
 
-	if m.IsRunning() {
-		fmt.Println("Stopping the container first...")
-		if err := m.Stop(); err != nil {
-			return err
-		}
-	}
-
 	fmt.Printf("Removing the container '%s'...\n", container.Name)
 
-	cmd := exec.Command("lxc-destroy", "-n", container.Name)
-	if err := cmd.Run(); err != nil {
-		fmt.Printf("Warning: lxc-destroy failed: %v\n", err)
-		fmt.Println("Attempting force cleanup...")
-	}
+	// Force remove the docker container
+	cmd := exec.Command("docker", "rm", "-f", container.Name)
+	cmd.Run()
 
-	containerPath := container.GetContainerPath()
-	if _, err := os.Stat(containerPath); err == nil {
-		fmt.Printf("Force removing container directory: %s\n", containerPath)
-		if err := os.RemoveAll(containerPath); err != nil {
-			fmt.Printf("Warning: Could not remove container directory: %v\n", err)
-		} else {
-			fmt.Println("Container directory removed")
-		}
-	}
-
-	// Remove log file if it exists
-	if _, err := os.Stat(container.LogFile); err == nil {
-		fmt.Printf("Removing log file: %s\n", container.LogFile)
-		os.Remove(container.LogFile)
-	}
-
-	fmt.Printf("Remove data directory and image cache? [y/N]: ")
+	fmt.Printf("Remove data directory? (%s) [y/N]: ", container.GetDataPath())
 	var response string
 	fmt.Scanln(&response)
 
 	if strings.ToLower(response) == "y" {
-		// Remove data directory
-		if err := os.RemoveAll(container.DataPath); err != nil {
+		if err := os.RemoveAll(container.GetDataPath()); err != nil {
 			fmt.Printf("Warning: Could not remove data directory: %v\n", err)
 		} else {
-			fmt.Printf("Data directory removed: %s\n", container.DataPath)
-		}
-
-		// Remove OCI image cache if it exists
-		// lxc-oci template usually caches in /var/cache/lxc/oci
-		cachePath := "/var/cache/lxc/oci"
-		if _, err := os.Stat(cachePath); err == nil {
-			fmt.Println("Cleaning OCI image cache...")
-			// Note: This removes ALL cached OCI images.
-			// Currently we don't have a safe way to remove only the one used by this container
-			// without potentially breaking others, but user asked to remove "embed images".
-			if err := os.RemoveAll(cachePath); err != nil {
-				fmt.Printf("Warning: Could not remove OCI cache: %v\n", err)
-			} else {
-				fmt.Println("OCI image cache cleaned")
-			}
+			fmt.Printf("Data directory removed: %s\n", container.GetDataPath())
 		}
 	}
 
@@ -200,155 +184,25 @@ func (m *Manager) Remove() error {
 }
 
 func (m *Manager) IsRunning() bool {
-	container, err := m.getContainer()
-	if err != nil {
-		return false
-	}
-
-	cmd := exec.Command("lxc-info", "-n", container.Name, "-s")
+	cmd := exec.Command("docker", "inspect", "-f", "{{.State.Running}}", m.containerName)
 	output, err := cmd.Output()
 	if err != nil {
 		return false
 	}
-
-	return strings.Contains(string(output), "RUNNING")
-}
-
-func (m *Manager) GetInfo() (string, error) {
-	container, err := m.getContainer()
-	if err != nil {
-		return "", err
-	}
-
-	cmd := exec.Command("lxc-info", container.Name)
-	output, err := cmd.Output()
-	if err != nil {
-		return "", err
-	}
-	return string(output), nil
+	return strings.TrimSpace(string(output)) == "true"
 }
 
 func (m *Manager) GetIP() (string, error) {
-	container, err := m.getContainer()
-	if err != nil {
-		return "", err
-	}
-
-	cmd := exec.Command("lxc-info", container.Name, "-i")
+	// For Docker, we usually connect via localhost if ports are mapped
+	// But if we want the internal IP:
+	cmd := exec.Command("docker", "inspect", "-f", "{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}", m.containerName)
 	output, err := cmd.Output()
 	if err != nil {
 		return "", err
 	}
-
-	lines := strings.Split(string(output), "\n")
-	var ipv4 string
-	for _, line := range lines {
-		if strings.Contains(line, "IP:") {
-			parts := strings.Fields(line)
-			if len(parts) >= 2 {
-				ip := parts[1]
-				// Prefer IPv4 (doesn't contain ':')
-				if !strings.Contains(ip, ":") {
-					return ip, nil
-				}
-				if ipv4 == "" {
-					ipv4 = ip
-				}
-			}
-		}
+	ip := strings.TrimSpace(string(output))
+	if ip == "" {
+		return "localhost", nil // Return localhost as fallback for mapped ports
 	}
-
-	if ipv4 != "" {
-		return ipv4, nil
-	}
-
-	return "", fmt.Errorf("no IP address found")
-}
-
-func (m *Manager) GetPID() (string, error) {
-	container, err := m.getContainer()
-	if err != nil {
-		return "", err
-	}
-
-	cmd := exec.Command("lxc-info", container.Name, "-p")
-	output, err := cmd.Output()
-	if err != nil {
-		return "", err
-	}
-
-	lines := strings.Split(string(output), "\n")
-	for _, line := range lines {
-		if strings.Contains(line, "PID:") {
-			parts := strings.Fields(line)
-			if len(parts) >= 2 {
-				return parts[1], nil
-			}
-		}
-	}
-
-	return "", fmt.Errorf("no PID found")
-}
-
-func CheckRoot() error {
-	if os.Geteuid() != 0 {
-		return fmt.Errorf("this command must be run as root (superuser)")
-	}
-	if os.Getenv("SUDO_USER") != "" || os.Getenv("SUDO_COMMAND") != "" {
-		return fmt.Errorf("running with 'sudo' is blocked. Please use 'su -' or run as root directly to ensure correct environment and paths")
-	}
-	return nil
-}
-
-type Lister struct{}
-
-func NewLister() *Lister {
-	return &Lister{}
-}
-
-func (l *Lister) List() error {
-	fmt.Println("LXC Containers:")
-
-	cmd := exec.Command("lxc-ls", "-f")
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-
-	return cmd.Run()
-}
-
-func (l *Lister) ListRedwayContainers() error {
-	cfg, err := config.Load()
-	if err != nil {
-		return fmt.Errorf("failed to load config: %v", err)
-	}
-
-	if len(cfg.Containers) == 0 {
-		fmt.Println("No containers configured")
-		return nil
-	}
-
-	fmt.Println("Redway Containers:")
-	fmt.Println("==================")
-
-	for _, container := range cfg.ListContainers() {
-		status := "Not initialized"
-		if container.Initialized {
-			status = "Initialized"
-		}
-
-		mgr := NewManagerForContainer(container.Name)
-		running := "Stopped"
-		if mgr.IsRunning() {
-			running = "Running"
-		}
-
-		fmt.Printf("\nName:        %s\n", container.Name)
-		fmt.Printf("Image:       %s\n", container.ImageURL)
-		fmt.Printf("Status:      %s\n", status)
-		fmt.Printf("Running:     %s\n", running)
-		fmt.Printf("Data Path:   %s\n", container.DataPath)
-		fmt.Printf("Log File:    %s\n", container.LogFile)
-	}
-
-	return nil
+	return ip, nil
 }

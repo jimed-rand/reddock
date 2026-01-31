@@ -3,8 +3,8 @@ package utils
 import (
 	"fmt"
 
-	"redway/pkg/config"
-	"redway/pkg/container"
+	"reddock/pkg/config"
+	"reddock/pkg/container"
 )
 
 type StatusManager struct {
@@ -28,49 +28,33 @@ func (s *StatusManager) Show() error {
 		return fmt.Errorf("container '%s' not found", s.containerName)
 	}
 
-	fmt.Println("Redway Status")
-	fmt.Println("=============")
+	fmt.Println("Reddock Status")
+	fmt.Println("==============")
 
 	fmt.Printf("\nContainer: %s\n", cont.Name)
 	fmt.Printf("Image: %s\n", cont.ImageURL)
-	fmt.Printf("Data Path: %s\n", cont.DataPath)
+	fmt.Printf("Data Path: %s\n", cont.GetDataPath())
 	fmt.Printf("GPU Mode: %s\n", cont.GPUMode)
 	fmt.Printf("Initialized: %v\n", cont.Initialized)
 
 	if !cont.Initialized {
-		fmt.Printf("\nThe container is not initialized. Run 'redway init %s' first.\n", cont.Name)
+		fmt.Printf("\nThe container is not initialized. Run 'reddock init %s' first.\n", cont.Name)
 		return nil
 	}
-
-	fmt.Println("\nContainer Information:")
-
-	info, err := s.manager.GetInfo()
-	if err != nil {
-		fmt.Printf("  Error getting info: %v\n", err)
-		return nil
-	}
-
-	fmt.Print(info)
 
 	if s.manager.IsRunning() {
 		fmt.Println("\nThe container is RUNNING")
 
-		if ip, err := s.manager.GetIP(); err == nil {
-			fmt.Printf("\nADB Connection:\n")
-			fmt.Printf("  adb connect %s:5555\n", ip)
-		} else {
-			fmt.Printf("\nADB Connection:\n")
-			fmt.Printf("  Waiting for IP address (Android may still be booting)...\n")
-			fmt.Printf("  Try running 'redway adb-connect %s' in a few moments.\n", cont.Name)
-		}
+		ip, _ := s.manager.GetIP()
+		fmt.Printf("\nADB Connection:\n")
+		fmt.Printf("  adb connect localhost:5555  (via mapped port)\n")
+		fmt.Printf("  Internal IP: %s\n", ip)
 
-		if pid, err := s.manager.GetPID(); err == nil {
-			fmt.Printf("\nDirect Shell Access:\n")
-			fmt.Printf("  nsenter -t %s -a sh\n", pid)
-		}
+		fmt.Printf("\nDirect Shell Access:\n")
+		fmt.Printf("  reddock shell %s\n", cont.Name)
 	} else {
 		fmt.Println("\nThe container is STOPPED")
-		fmt.Printf("\nStart with: redway start %s\n", cont.Name)
+		fmt.Printf("\nStart with: reddock start %s\n", cont.Name)
 	}
 
 	return nil

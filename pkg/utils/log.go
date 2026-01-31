@@ -4,11 +4,9 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"os/signal"
-	"syscall"
 
-	"redway/pkg/config"
-	"redway/pkg/container"
+	"reddock/pkg/config"
+	"reddock/pkg/container"
 )
 
 type LogManager struct {
@@ -33,30 +31,12 @@ func (l *LogManager) Show() error {
 		return fmt.Errorf("container '%s' not found", l.containerName)
 	}
 
-	logFile := cont.LogFile
-
-	if _, err := os.Stat(logFile); os.IsNotExist(err) {
-		return fmt.Errorf("The log file '%s' is not found", logFile)
-	}
-
-	fmt.Printf("Showing logs from: %s\n", logFile)
+	fmt.Printf("Showing logs for container: %s\n", l.containerName)
 	fmt.Println("Press Ctrl+C to exit")
 
-	cmd := exec.Command("tail", "-f", logFile)
+	cmd := exec.Command("docker", "logs", "-f", l.containerName)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 
-	if err := cmd.Start(); err != nil {
-		return err
-	}
-
-	c := make(chan os.Signal, 1)
-	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
-
-	go func() {
-		<-c
-		cmd.Process.Signal(syscall.SIGTERM)
-	}()
-
-	return cmd.Wait()
+	return cmd.Run()
 }

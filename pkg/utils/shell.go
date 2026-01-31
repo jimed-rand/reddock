@@ -5,7 +5,7 @@ import (
 	"os"
 	"os/exec"
 
-	"redway/pkg/container"
+	"reddock/pkg/container"
 )
 
 type ShellManager struct {
@@ -25,17 +25,12 @@ func (s *ShellManager) Enter() error {
 		return err
 	}
 	if !s.manager.IsRunning() {
-		return fmt.Errorf("The container '%s' is not running. Start it with 'redway start %s'", s.containerName, s.containerName)
+		return fmt.Errorf("the container '%s' is not running. Start it with 'reddock start %s'", s.containerName, s.containerName)
 	}
 
-	pid, err := s.manager.GetPID()
-	if err != nil {
-		return fmt.Errorf("Failed to get container PID: %v", err)
-	}
+	fmt.Printf("Entering container shell for '%s'...\n", s.containerName)
 
-	fmt.Printf("Entering container shell (PID: %s)...\n", pid)
-
-	cmd := exec.Command("nsenter", "-t", pid, "-a", "sh")
+	cmd := exec.Command("docker", "exec", "-it", s.containerName, "sh")
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr

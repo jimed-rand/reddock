@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"redway/cmd"
+	"reddock/cmd"
 )
 
 // Main application entrypoint

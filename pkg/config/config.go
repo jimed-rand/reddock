@@ -8,11 +8,8 @@ import (
 )
 
 const (
-	DefaultImageURL     = "docker://redroid/redroid:13.0.0_64only-latest"
-	DefaultGPUMode      = "guest"
-	DefaultBridgeName   = "lxcbr0"
-	DefaultBridgeSubnet = "10.0.3.0/24"
-	DefaultBridgeIP     = "10.0.3.1"
+	DefaultImageURL = "redroid/redroid:13.0.0_64only-latest"
+	DefaultGPUMode  = "guest"
 )
 
 type Container struct {
@@ -20,18 +17,18 @@ type Container struct {
 	ImageURL    string `json:"image_url"`
 	DataPath    string `json:"data_path"`
 	LogFile     string `json:"log_file"`
+	Port        int    `json:"port"`
 	GPUMode     string `json:"gpu_mode"`
 	Initialized bool   `json:"initialized"`
 }
 
 type Config struct {
 	Containers map[string]*Container `json:"containers"`
-	LXCReady   bool                  `json:"lxc_ready"`
 }
 
 func GetConfigDir() string {
 	home := os.Getenv("HOME")
-	return filepath.Join(home, ".config", "redway")
+	return filepath.Join(home, ".config", "reddock")
 }
 
 func GetConfigPath() string {
@@ -46,7 +43,6 @@ func GetDefaultDataPath(containerName string) string {
 func GetDefault() *Config {
 	return &Config{
 		Containers: make(map[string]*Container),
-		LXCReady:   false,
 	}
 }
 
@@ -71,8 +67,6 @@ func Load() (*Config, error) {
 		cfg.Containers = make(map[string]*Container)
 	}
 
-	cfg.SyncWithLXC()
-
 	return &cfg, nil
 }
 
@@ -96,16 +90,11 @@ func Save(cfg *Config) error {
 	return nil
 }
 
-func (c *Container) GetContainerPath() string {
-	return filepath.Join("/var/lib/lxc", c.Name)
-}
-
-func (c *Container) GetConfigFilePath() string {
-	return filepath.Join(c.GetContainerPath(), "config")
-}
-
-func (c *Container) GetRootfsPath() string {
-	return filepath.Join(c.GetContainerPath(), "rootfs")
+func (c *Container) GetDataPath() string {
+	if c.DataPath != "" {
+		return c.DataPath
+	}
+	return GetDefaultDataPath(c.Name)
 }
 
 func (cfg *Config) GetContainer(name string) *Container {
@@ -132,43 +121,4 @@ func (cfg *Config) ListContainers() []*Container {
 		containers = append(containers, container)
 	}
 	return containers
-}
-
-func (cfg *Config) SyncWithLXC() {
-	if _, err := os.Stat("/var/lib/lxc"); os.IsNotExist(err) {
-		return
-	}
-
-	entries, err := os.ReadDir("/var/lib/lxc")
-	if err != nil {
-		return
-	}
-
-	modified := false
-	for _, entry := range entries {
-		if !entry.IsDir() {
-			continue
-		}
-
-		name := entry.Name()
-		if _, exists := cfg.Containers[name]; !exists {
-			// Check if it's really an LXC container (has a config file)
-			configPath := filepath.Join("/var/lib/lxc", name, "config")
-			if _, err := os.Stat(configPath); err == nil {
-				cfg.AddContainer(&Container{
-					Name:        name,
-					ImageURL:    "unknown (discovered)",
-					DataPath:    GetDefaultDataPath(name),
-					LogFile:     name + ".log",
-					GPUMode:     DefaultGPUMode,
-					Initialized: true, // Assume initialized if it exists in LXC
-				})
-				modified = true
-			}
-		}
-	}
-
-	if modified {
-		Save(cfg)
-	}
 }

@@ -1,7 +1,7 @@
 .PHONY: help all build static install uninstall clean test fmt vet lint coverage dist check-linux run
 
 # Configuration
-BINARY = redway
+BINARY = reddock
 OS := $(shell uname -s)
 PREFIX ?= /usr/local
 BINDIR = $(PREFIX)/bin
@@ -12,13 +12,13 @@ LDFLAGS = -ldflags "-s -w"
 
 check-linux:
 	@if [ "$(OS)" != "Linux" ]; then \
-		echo "Error: Redway is only available for Linux systems"; \
+		echo "Error: Reddock is only available for Linux systems"; \
 		echo "Detected OS: $(OS)"; \
 		exit 1; \
 	fi
 
 help:
-	@echo "Redway Makefile"
+	@echo "Reddock Makefile"
 	@echo ""
 	@echo "Build Targets:"
 	@echo "  make build          - Build the binary (default)"
@@ -46,7 +46,7 @@ help:
 all: build
 
 build: check-linux
-	@echo "Building Redway $(VERSION)..."
+	@echo "Building Reddock..."
 	$(GO) build $(LDFLAGS) -o $(BINARY) .
 	@echo "Build complete: ./$(BINARY)"
 
@@ -58,28 +58,24 @@ static: check-linux
 dist: check-linux build
 	@echo "Creating distribution package..."
 	@mkdir -p dist
-	tar -czf dist/$(BINARY)-$(VERSION)-linux-amd64.tar.gz $(BINARY) README.md LICENSE
-	@echo "Distribution package: dist/$(BINARY)-$(VERSION)-linux-amd64.tar.gz"
+	tar -czf dist/$(BINARY)-linux-amd64.tar.gz $(BINARY) README.md LICENSE
+	@echo "Distribution package: dist/$(BINARY)-linux-amd64.tar.gz"
 
 run: build
-	@echo "Note: Some commands require root privileges (use 'su -')"
 	./$(BINARY) $(ARGS)
 
 install: check-linux build
-	@echo "Installing Redway to $(DESTDIR)$(BINDIR)..."
+	@echo "Installing Reddock to $(DESTDIR)$(BINDIR)..."
 	install -Dm755 $(BINARY) $(DESTDIR)$(BINDIR)/$(BINARY)
 	@echo "Installation complete!"
 	@echo ""
 	@echo "Quick Start:"
-	@echo "  # Become root properly"
-	@echo "  su -"
-	@echo "  redway prepare-lxc             # Setup LXC environment"
-	@echo "  redway init <name>             # Initialize a container"
-	@echo "  redway start <name>            # Start the container"
-	@echo "  redway list                         # List managed containers"
+	@echo "  sudo reddock init android13"
+	@echo "  sudo reddock start android13"
+	@echo "  sudo reddock list"
 
 uninstall:
-	@echo "Uninstalling Redway from $(DESTDIR)$(BINDIR)..."
+	@echo "Uninstalling Reddock from $(DESTDIR)$(BINDIR)..."
 	rm -f $(DESTDIR)$(BINDIR)/$(BINARY)
 	@echo "Uninstall complete"
 

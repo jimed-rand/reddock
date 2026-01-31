@@ -1,12 +1,13 @@
-.PHONY: help all build static install uninstall clean test fmt vet lint coverage dist check-linux
+.PHONY: help all build static install uninstall clean test fmt vet lint coverage dist check-linux run
 
+# Configuration
+BINARY = redway
 OS := $(shell uname -s)
 PREFIX ?= /usr/local
 BINDIR = $(PREFIX)/bin
-BINARY = redway
 GO = go
-GOFLAGS = -ldflags "-s -w"
 
+# LDFLAGS for size optimization
 LDFLAGS = -ldflags "-s -w"
 
 check-linux:
@@ -17,109 +18,95 @@ check-linux:
 	fi
 
 help:
-	@echo "Redway Makefile Targets"
+	@echo "Redway Makefile"
 	@echo ""
 	@echo "Build Targets:"
 	@echo "  make build          - Build the binary (default)"
 	@echo "  make static         - Build a static binary (no CGO)"
-	@echo "  make dist           - Build binaries for multiple platforms"
+	@echo "  make dist           - Build distribution package"
 	@echo ""
 	@echo "Installation:"
 	@echo "  make install        - Build and install to $(PREFIX)/bin"
 	@echo "  make uninstall      - Remove installed binary"
 	@echo ""
 	@echo "Development:"
+	@echo "  make run            - Run with original arguments (e.g. make run ARGS='list')"
 	@echo "  make fmt            - Format code with gofmt"
 	@echo "  make vet            - Run go vet for static analysis"
-	@echo "  make lint           - Run golangci-lint (if installed)"
-	@echo "  make test           - Run tests with verbose output"
-	@echo "  make coverage       - Run tests with coverage report"
+	@echo "  make lint           - Run golangci-lint"
+	@echo "  make test           - Run tests"
+	@echo "  make coverage       - Generate coverage report"
 	@echo ""
 	@echo "Maintenance:"
-	@echo "  make clean          - Remove built binaries"
-	@echo "  make help           - Show this help message"
+	@echo "  make clean          - Remove build artifacts"
 	@echo ""
 	@echo "Variables:"
 	@echo "  PREFIX              - Installation prefix (default: /usr/local)"
-	@echo "  DESTDIR             - Staging directory for install"
-	@echo ""
 
 all: build
 
 build: check-linux
-	@echo "Building Redway..."
+	@echo "Building Redway $(VERSION)..."
 	$(GO) build $(LDFLAGS) -o $(BINARY) .
-	@echo "Build complete: $(BINARY)"
+	@echo "Build complete: ./$(BINARY)"
 
 static: check-linux
 	@echo "Building static binary..."
 	CGO_ENABLED=0 $(GO) build $(LDFLAGS) -o $(BINARY) .
-	@echo "Static build complete: $(BINARY)"
+	@echo "Static build complete: ./$(BINARY)"
 
-dist:
-	@echo "Building distribution binaries..."
+dist: check-linux build
+	@echo "Creating distribution package..."
 	@mkdir -p dist
-	@for os in linux darwin windows; do \
-		for arch in amd64 arm64; do \
-			echo "  Building $$os/$$arch..."; \
-			GOOS=$$os GOARCH=$$arch $(GO) build $(LDFLAGS) -o dist/$(BINARY)-$$os-$$arch . || true; \
-		done; \
-	done
-	@echo "Distribution builds complete in dist/"
+	tar -czf dist/$(BINARY)-$(VERSION)-linux-amd64.tar.gz $(BINARY) README.md LICENSE
+	@echo "Distribution package: dist/$(BINARY)-$(VERSION)-linux-amd64.tar.gz"
+
+run: build
+	@echo "Note: Some commands require sudo (init, start, prepare-lxc)"
+	./$(BINARY) $(ARGS)
 
 install: check-linux build
-	@echo "Installing Redway..."
+	@echo "Installing Redway to $(DESTDIR)$(BINDIR)..."
 	install -Dm755 $(BINARY) $(DESTDIR)$(BINDIR)/$(BINARY)
-	@echo ""
 	@echo "Installation complete!"
 	@echo ""
-	@echo "Usage:"
-	@echo "  sudo redway init                                    				# Initialize with default image"
-	@echo "  sudo redway init docker://redroid/redroid:16.0.0_64only-latest		# Custom OCI image"
-	@echo "  sudo redway start                                   				# Start container"
-	@echo "  redway adb-connect                                  				# Get ADB info"
-	@echo ""
+	@echo "Quick Start:"
+	@echo "  sudo redway prepare-lxc             # Setup LXC environment"
+	@echo "  sudo redway init <name>             # Initialize a container"
+	@echo "  sudo redway start <name>            # Start the container"
+	@echo "  redway list                         # List managed containers"
 
 uninstall:
-	@echo "Uninstalling Redway..."
+	@echo "Uninstalling Redway from $(DESTDIR)$(BINDIR)..."
 	rm -f $(DESTDIR)$(BINDIR)/$(BINARY)
 	@echo "Uninstall complete"
-	@echo ""
-	@echo "Note: Config and data preserved. Remove manually if needed:"
-	@echo "  rm -rf ~/.config/redway"
-	@echo "  rm -rf ~/data-redroid"
-	@echo ""
 
 fmt:
 	@echo "Formatting code..."
 	$(GO) fmt ./...
-	@echo "Code formatted"
 
 vet:
 	@echo "Running go vet..."
 	$(GO) vet ./...
-	@echo "Vet check passed"
 
 lint:
 	@echo "Running golangci-lint..."
-	@which golangci-lint > /dev/null || (echo "golangci-lint not found. Install with: go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest" && exit 1)
+	@which golangci-lint > /dev/null || (echo "golangci-lint not found. Install it for better checks." && exit 1)
 	golangci-lint run ./...
-	@echo "Lint check passed"
 
 test:
 	@echo "Running tests..."
 	$(GO) test -v ./...
-	@echo "Tests passed"
 
 coverage:
 	@echo "Running tests with coverage..."
 	$(GO) test -v -coverprofile=coverage.out ./...
 	$(GO) tool cover -html=coverage.out -o coverage.html
-	@echo "Coverage report generated: coverage.html"
+	@echo "Coverage report: coverage.html"
 
 clean:
-	@echo "Cleaning..."
+	@echo "Cleaning artifacts..."
 	rm -f $(BINARY)
 	rm -rf dist/
 	rm -f coverage.out coverage.html
-	@echo "Clean complete"
+	@echo "Done"

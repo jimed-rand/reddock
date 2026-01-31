@@ -71,6 +71,8 @@ func Load() (*Config, error) {
 		cfg.Containers = make(map[string]*Container)
 	}
 
+	cfg.SyncWithLXC()
+
 	return &cfg, nil
 }
 
@@ -130,4 +132,43 @@ func (cfg *Config) ListContainers() []*Container {
 		containers = append(containers, container)
 	}
 	return containers
+}
+
+func (cfg *Config) SyncWithLXC() {
+	if _, err := os.Stat("/var/lib/lxc"); os.IsNotExist(err) {
+		return
+	}
+
+	entries, err := os.ReadDir("/var/lib/lxc")
+	if err != nil {
+		return
+	}
+
+	modified := false
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+
+		name := entry.Name()
+		if _, exists := cfg.Containers[name]; !exists {
+			// Check if it's really an LXC container (has a config file)
+			configPath := filepath.Join("/var/lib/lxc", name, "config")
+			if _, err := os.Stat(configPath); err == nil {
+				cfg.AddContainer(&Container{
+					Name:        name,
+					ImageURL:    "unknown (discovered)",
+					DataPath:    GetDefaultDataPath(name),
+					LogFile:     name + ".log",
+					GPUMode:     DefaultGPUMode,
+					Initialized: true, // Assume initialized if it exists in LXC
+				})
+				modified = true
+			}
+		}
+	}
+
+	if modified {
+		Save(cfg)
+	}
 }

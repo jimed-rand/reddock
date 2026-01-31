@@ -40,8 +40,10 @@ func NewInitializer(containerName, image string) *Initializer {
 			Initialized: false,
 		}
 		cfg.AddContainer(container)
+		config.Save(cfg)
 	} else {
 		container.ImageURL = image
+		config.Save(cfg)
 	}
 
 	return &Initializer{
@@ -324,6 +326,11 @@ func (p *LXCPreparer) adjustOCITemplate() error {
 	}
 
 	modified := strings.ReplaceAll(string(content), "set -eu", "set -u")
+	modified = strings.ReplaceAll(modified, ".layers[]", ".layers[]?")
+	modified = strings.ReplaceAll(modified, ".fsLayers[]", ".fsLayers[]?")
+	modified = strings.ReplaceAll(modified, ".config.Env[]", ".config.Env[]?")
+	modified = strings.ReplaceAll(modified, ".config.Entrypoint[]", ".config.Entrypoint[]?")
+	modified = strings.ReplaceAll(modified, ".config.Cmd[]", ".config.Cmd[]?")
 
 	if err := os.WriteFile(templatePath, []byte(modified), 0755); err != nil {
 		return fmt.Errorf("failed to write template: %v", err)
@@ -417,7 +424,7 @@ func (i *Initializer) cleanupExistingContainer() error {
 	}
 
 	fmt.Printf("Existing container directory found at %s\n", containerPath)
-	
+
 	cmd := exec.Command("lxc-info", "-n", i.container.Name, "-s")
 	if output, err := cmd.Output(); err == nil {
 		if strings.Contains(string(output), "RUNNING") {
@@ -473,8 +480,14 @@ func (i *Initializer) fixContainerFilesystem() error {
 	rootfs := i.container.GetRootfsPath()
 
 	etcDir := filepath.Join(rootfs, "etc")
-	if stat, err := os.Stat(etcDir); err == nil && stat.IsDir() {
-		fmt.Println("/etc directory already exists")
+	if info, err := os.Lstat(etcDir); err == nil {
+		if info.IsDir() {
+			fmt.Println("/etc directory already exists")
+		} else if (info.Mode() & os.ModeSymlink) != 0 {
+			fmt.Println("/etc exists as a symlink")
+		} else {
+			fmt.Println("/etc exists but is not a directory or symlink")
+		}
 	} else if os.IsNotExist(err) {
 		if err := os.MkdirAll(etcDir, 0755); err != nil {
 			return fmt.Errorf("failed to create /etc directory: %v", err)

@@ -189,3 +189,25 @@ func (c *Command) executeLog() error {
 	logger := utils.NewLogManager(containerName)
 	return logger.Show()
 }
+
+func PrintUsage() {
+	fmt.Println("Redway - Redroid Container Manager")
+	fmt.Println("\nUsage: redway [command] [options]")
+	fmt.Println("\nCommands:")
+	fmt.Println("  prepare-lxc                    Prepare LXC system (one-time setup)")
+	fmt.Println("  unprepare-lxc                  Clean up LXC system (reverses prepare-lxc)")
+	fmt.Println("  init <name> [image]            Initialize container (name required)")
+	fmt.Println("  start <name>                   Start container (name required)")
+	fmt.Println("  stop <name>                    Stop container (name required)")
+	fmt.Println("  restart <name>                 Restart container (name required)")
+	fmt.Println("  status <name>                  Show container status (name required)")
+	fmt.Println("  shell <name>                   Enter container shell (name required)")
+	fmt.Println("  adb-connect <name>             Show ADB connection command (name required)")
+	fmt.Println("  remove <name>                  Remove container and data (name required)")
+	fmt.Println("  list                           List all Redway containers")
+	fmt.Println("  log <name>                     Show container logs (name required)")
+	fmt.Println("\nExamples:")
+	fmt.Println("  sudo redway prepare-lxc")
+	fmt.Println("  sudo redway init android16")
+	fmt.Println("  sudo redway start android16")
+}

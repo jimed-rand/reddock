@@ -3,11 +3,11 @@ package main
 import (
 	"fmt"
 	"os"
-	
+
 	"redway/cmd"
 )
 
-const Version = "1.0.0"
+// Main application entrypoint
 
 func main() {
 	if len(os.Args) < 2 {

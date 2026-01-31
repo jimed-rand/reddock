@@ -39,6 +39,9 @@ func (m *Manager) getContainer() (*config.Container, error) {
 }
 
 func (m *Manager) Start() error {
+	if err := CheckRoot(); err != nil {
+		return err
+	}
 	container, err := m.getContainer()
 	if err != nil {
 		return err
@@ -76,6 +79,9 @@ func (m *Manager) Start() error {
 }
 
 func (m *Manager) Stop() error {
+	if err := CheckRoot(); err != nil {
+		return err
+	}
 	container, err := m.getContainer()
 	if err != nil {
 		return err
@@ -109,6 +115,9 @@ func (m *Manager) Restart() error {
 }
 
 func (m *Manager) Remove() error {
+	if err := CheckRoot(); err != nil {
+		return err
+	}
 	container, err := m.getContainer()
 	if err != nil {
 		return err
@@ -259,6 +268,16 @@ func (m *Manager) GetPID() (string, error) {
 	}
 
 	return "", fmt.Errorf("no PID found")
+}
+
+func CheckRoot() error {
+	if os.Geteuid() != 0 {
+		return fmt.Errorf("this command must be run as root (superuser)")
+	}
+	if os.Getenv("SUDO_USER") != "" || os.Getenv("SUDO_COMMAND") != "" {
+		return fmt.Errorf("running with 'sudo' is blocked. Please use 'su -' or run as root directly to ensure correct environment and paths")
+	}
+	return nil
 }
 
 type Lister struct{}

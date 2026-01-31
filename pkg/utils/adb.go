@@ -19,6 +19,9 @@ func NewAdbManager(containerName string) *AdbManager {
 }
 
 func (a *AdbManager) ShowConnection() error {
+	if err := container.CheckRoot(); err != nil {
+		return err
+	}
 	if !a.manager.IsRunning() {
 		return fmt.Errorf("The container '%s' is not running. Start it with 'redway start %s'", a.containerName, a.containerName)
 	}

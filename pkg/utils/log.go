@@ -8,6 +8,7 @@ import (
 	"syscall"
 
 	"redway/pkg/config"
+	"redway/pkg/container"
 )
 
 type LogManager struct {
@@ -24,12 +25,15 @@ func NewLogManager(containerName string) *LogManager {
 }
 
 func (l *LogManager) Show() error {
-	container := l.config.GetContainer(l.containerName)
-	if container == nil {
+	if err := container.CheckRoot(); err != nil {
+		return err
+	}
+	cont := l.config.GetContainer(l.containerName)
+	if cont == nil {
 		return fmt.Errorf("container '%s' not found", l.containerName)
 	}
 
-	logFile := container.LogFile
+	logFile := cont.LogFile
 
 	if _, err := os.Stat(logFile); os.IsNotExist(err) {
 		return fmt.Errorf("The log file '%s' is not found", logFile)

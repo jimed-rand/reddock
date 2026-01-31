@@ -21,6 +21,9 @@ func NewShellManager(containerName string) *ShellManager {
 }
 
 func (s *ShellManager) Enter() error {
+	if err := container.CheckRoot(); err != nil {
+		return err
+	}
 	if !s.manager.IsRunning() {
 		return fmt.Errorf("The container '%s' is not running. Start it with 'redway start %s'", s.containerName, s.containerName)
 	}

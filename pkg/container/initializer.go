@@ -53,6 +53,10 @@ func NewInitializer(containerName, image string) *Initializer {
 }
 
 func (p *LXCPreparer) PrepareLXC() error {
+	if err := CheckRoot(); err != nil {
+		return err
+	}
+
 	fmt.Println("Preparing LXC system...")
 
 	steps := []struct {
@@ -62,6 +66,8 @@ func (p *LXCPreparer) PrepareLXC() error {
 		{"Checking kernel modules", p.checkKernelModules},
 		{"Checking LXC tools", p.checkLXCTools},
 		{"Checking LXC networking service", p.checkLXCNetService},
+		{"Setting up networking", p.setupLXCNetworking},
+		{"Writing default configuration", p.prepareLXCCapabilities},
 		{"Adjusting OCI template", p.adjustOCITemplate},
 		{"Checking required tools", p.checkRequiredTools},
 	}
@@ -83,6 +89,9 @@ func (p *LXCPreparer) PrepareLXC() error {
 }
 
 func (p *LXCPreparer) UnprepareLXC() error {
+	if err := CheckRoot(); err != nil {
+		return err
+	}
 	fmt.Println("Cleaning up LXC system...")
 
 	cfg, err := config.Load()
@@ -125,8 +134,8 @@ func (i *Initializer) Initialize() error {
 	fmt.Printf("Container: %s\n", i.container.Name)
 	fmt.Printf("Image: %s\n\n", i.container.ImageURL)
 
-	if !i.config.LXCReady {
-		return fmt.Errorf("LXC system is not prepared. Please run 'redway prepare-lxc' first as root/sudo")
+	if err := CheckRoot(); err != nil {
+		return err
 	}
 
 	if err := i.cleanupExistingContainer(); err != nil {
@@ -138,7 +147,6 @@ func (i *Initializer) Initialize() error {
 		fn   func() error
 	}{
 		{"Creating container", i.createContainer},
-		{"Fixing container filesystem", i.fixContainerFilesystem},
 		{"Creating data directory", i.createDataDirectory},
 		{"Adjusting container config", i.adjustContainerConfig},
 		{"Applying networking workaround", i.applyNetworkingWorkaround},
@@ -318,7 +326,6 @@ func (p *LXCPreparer) prepareLXCCapabilities() error {
 	content := fmt.Sprintf(`lxc.net.0.type = veth
 lxc.net.0.link = %s
 lxc.net.0.flags = up
-lxc.net.0.hwaddr = ee:aa:ca:fe:55:01
 `, config.DefaultBridgeName)
 
 	if err := os.WriteFile(defaultConf, []byte(content), 0644); err != nil {
@@ -435,7 +442,6 @@ func (p *LXCPreparer) cleanDefaultConfig() error {
 
 func (i *Initializer) cleanupExistingContainer() error {
 	containerPath := i.container.GetContainerPath()
-
 	if _, err := os.Stat(containerPath); os.IsNotExist(err) {
 		return nil
 	}
@@ -474,6 +480,15 @@ func (i *Initializer) createContainer() error {
 		return nil
 	}
 
+	// Ensure /etc/lxc/default.conf exists before creating, as lxc-create expects it
+	if _, err := os.Stat("/etc/lxc/default.conf"); os.IsNotExist(err) {
+		fmt.Println("Warning: /etc/lxc/default.conf missing, creating it...")
+		p := &LXCPreparer{config: i.config}
+		if err := p.prepareLXCCapabilities(); err != nil {
+			return fmt.Errorf("failed to create default LXC config: %v", err)
+		}
+	}
+
 	fmt.Printf("Creating LXC container from %s...\n", i.container.ImageURL)
 
 	cmd := exec.Command("lxc-create",
@@ -490,52 +505,6 @@ func (i *Initializer) createContainer() error {
 	}
 
 	fmt.Println("Container created")
-	return nil
-}
-
-func (i *Initializer) fixContainerFilesystem() error {
-	rootfs := i.container.GetRootfsPath()
-
-	etcDir := filepath.Join(rootfs, "etc")
-	if info, err := os.Lstat(etcDir); err == nil {
-		if info.IsDir() {
-			fmt.Println("/etc directory already exists")
-		} else if (info.Mode() & os.ModeSymlink) != 0 {
-			fmt.Println("/etc exists as a symlink")
-		} else {
-			fmt.Println("/etc exists but is not a directory or symlink")
-		}
-	} else if os.IsNotExist(err) {
-		if err := os.MkdirAll(etcDir, 0755); err != nil {
-			return fmt.Errorf("failed to create /etc directory: %v", err)
-		}
-		fmt.Println("Created /etc directory")
-	} else {
-		return fmt.Errorf("failed to stat /etc directory: %v", err)
-	}
-
-	hostnamePath := filepath.Join(etcDir, "hostname")
-	if _, err := os.Stat(hostnamePath); os.IsNotExist(err) {
-		if err := os.WriteFile(hostnamePath, []byte(i.container.Name+"\n"), 0644); err != nil {
-			return fmt.Errorf("failed to create /etc/hostname: %v", err)
-		}
-		fmt.Println("Created /etc/hostname")
-	} else {
-		fmt.Println("/etc/hostname already exists")
-	}
-
-	hostsPath := filepath.Join(etcDir, "hosts")
-	if _, err := os.Stat(hostsPath); os.IsNotExist(err) {
-		hostsContent := fmt.Sprintf("127.0.0.1 localhost\n127.0.1.1 %s\n::1 localhost ip6-localhost ip6-loopback\n", i.container.Name)
-		if err := os.WriteFile(hostsPath, []byte(hostsContent), 0644); err != nil {
-			return fmt.Errorf("failed to create /etc/hosts: %v", err)
-		}
-		fmt.Println("Created /etc/hosts")
-	} else {
-		fmt.Println("/etc/hosts already exists")
-	}
-
-	fmt.Println("Container filesystem fixed")
 	return nil
 }
 
@@ -567,12 +536,15 @@ func (i *Initializer) adjustContainerConfig() error {
 
 	additionalConfig := fmt.Sprintf(`
 ### hacked
+lxc.net.0.type = veth
+lxc.net.0.link = %s
+lxc.net.0.flags = up
 lxc.init.cmd = /init androidboot.hardware=redroid androidboot.redroid_gpu_mode=%s
 lxc.apparmor.profile = unconfined
 lxc.autodev = 1
 lxc.autodev.tmpfs.size = 25000000
 lxc.mount.entry = %s data none bind 0 0
-`, i.container.GPUMode, i.container.DataPath)
+`, config.DefaultBridgeName, i.container.GPUMode, i.container.DataPath)
 
 	newLines = append(newLines, additionalConfig)
 

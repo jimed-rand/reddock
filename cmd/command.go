@@ -48,6 +48,8 @@ func (c *Command) Execute() error {
 		return c.executeLog()
 	case "prune":
 		return c.executePrune()
+	case "version":
+		return c.executeVersion()
 	default:
 		return fmt.Errorf("Unknown command: %s", c.Name)
 	}
@@ -224,7 +226,7 @@ func (c *Command) executePrune() error {
 }
 
 func PrintUsage() {
-	fmt.Println("Reddock")
+	fmt.Printf("Reddock v%s\n", Version)
 	fmt.Println("\nUsage: reddock [command] [options]")
 	fmt.Println("\nCommands:")
 	fmt.Println("  init [<name>] [<image>]        Initialize container (interactive if name/image omitted)")
@@ -238,6 +240,7 @@ func PrintUsage() {
 	fmt.Println("  list                           List all Reddock containers")
 	fmt.Println("  log <name>                     Show container logs (name required)")
 	fmt.Println("  prune                          Remove unused images")
+	fmt.Println("  version                        Show version information")
 	fmt.Println("\nExamples:")
 	fmt.Println("  sudo reddock init android13")
 	fmt.Println("  sudo reddock start android13 -v")

@@ -83,6 +83,7 @@ reddock adb-connect my-android
 | `log <name>`            | Show container logs                                 |
 | `list`                  | List all Reddock-managed containers                 |
 | `remove <name> [--all]` | Remove a container, data, and optionally image (-a) |
+| `version`               | Show version information                            |
 
 ## Troubleshooting
 

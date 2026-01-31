@@ -2,13 +2,14 @@
 
 # Configuration
 BINARY = reddock
+VERSION = 2.20
 OS := $(shell uname -s)
 PREFIX ?= /usr/local
 BINDIR = $(PREFIX)/bin
 GO = go
 
-# LDFLAGS for size optimization
-LDFLAGS = -ldflags "-s -w"
+# LDFLAGS for size optimization and version injection
+LDFLAGS = -ldflags "-s -w -X reddock/cmd.Version=$(VERSION)"
 
 check-linux:
 	@if [ "$(OS)" != "Linux" ]; then \

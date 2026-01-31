@@ -10,12 +10,10 @@ import (
 	"redway/pkg/config"
 )
 
-// LXCPreparer handles LXC system-level setup (one-time setup)
 type LXCPreparer struct {
 	config *config.Config
 }
 
-// Initializer handles individual container initialization
 type Initializer struct {
 	config    *config.Config
 	container *config.Container
@@ -52,8 +50,6 @@ func NewInitializer(containerName, image string) *Initializer {
 	}
 }
 
-// PrepareLXC sets up the LXC system (kernel modules, networking, tools)
-// This should be run once before creating any containers
 func (p *LXCPreparer) PrepareLXC() error {
 	fmt.Println("Preparing LXC system...")
 
@@ -85,15 +81,55 @@ func (p *LXCPreparer) PrepareLXC() error {
 	return nil
 }
 
-// Initialize sets up an individual container
+func (p *LXCPreparer) UnprepareLXC() error {
+	fmt.Println("Cleaning up LXC system...")
+
+	cfg, err := config.Load()
+	if err != nil {
+		return fmt.Errorf("failed to load config: %v", err)
+	}
+
+	if len(cfg.Containers) > 0 {
+		return fmt.Errorf("cannot unprepare LXC: containers still exist. Remove all containers first with 'redway remove'")
+	}
+
+	steps := []struct {
+		name string
+		fn   func() error
+	}{
+		{"Removing NAT rules", p.removeNATRules},
+		{"Removing bridge", p.removeBridge},
+		{"Cleaning default config", p.cleanDefaultConfig},
+	}
+
+	for _, step := range steps {
+		fmt.Printf("[*] %s...\n", step.name)
+		if err := step.fn(); err != nil {
+			fmt.Printf("Warning: %s failed: %v\n", step.name, err)
+		}
+	}
+
+	p.config.LXCReady = false
+	if err := config.Save(p.config); err != nil {
+		return fmt.Errorf("failed to save config: %v", err)
+	}
+
+	fmt.Println("\nLXC system cleanup completed!")
+	fmt.Println("Note: Kernel modules and installed packages were not removed")
+	return nil
+}
+
 func (i *Initializer) Initialize() error {
 	fmt.Println("Initializing the container...")
 	fmt.Printf("Container: %s\n", i.container.Name)
 	fmt.Printf("Image: %s\n\n", i.container.ImageURL)
 
-	// Check if LXC is prepared
 	if !i.config.LXCReady {
 		return fmt.Errorf("LXC system is not prepared. Please run 'redway prepare-lxc' first as root/sudo")
+	}
+
+	if err := i.cleanupExistingContainer(); err != nil {
+		return fmt.Errorf("pre-init cleanup failed: %v", err)
 	}
 
 	steps := []struct {
@@ -128,8 +164,6 @@ func (i *Initializer) Initialize() error {
 
 	return nil
 }
-
-// LXC Preparation Methods
 
 func (p *LXCPreparer) checkKernelModules() error {
 	binderFound := false
@@ -187,10 +221,6 @@ func (p *LXCPreparer) setupLXCNetworking() error {
 	}
 
 	fmt.Printf("Setting up LXC networking with bridge %s...\n", bridgeName)
-
-	// Attempt to use lxc-net with custom config if it's the default bridge
-	// but here the user specifically asked for redroid0.
-	// We will manually create the bridge for maximum control as requested.
 
 	commands := [][]string{
 		{"ip", "link", "add", "name", bridgeName, "type", "bridge"},
@@ -260,7 +290,6 @@ func (p *LXCPreparer) ensureIPForwarding() error {
 func (p *LXCPreparer) prepareLXCCapabilities() error {
 	fmt.Println("Preparing LXC capabilities...")
 
-	// 1. Ensure /etc/lxc/default.conf exists with basic networking
 	lxcConfDir := "/etc/lxc"
 	if err := os.MkdirAll(lxcConfDir, 0755); err != nil {
 		return fmt.Errorf("failed to create lxc config dir: %v", err)
@@ -322,7 +351,96 @@ func (p *LXCPreparer) checkRequiredTools() error {
 	return nil
 }
 
-// Container Initialization Methods
+func (p *LXCPreparer) removeNATRules() error {
+	bridgeSubnet := config.DefaultBridgeSubnet
+
+	checkCmd := exec.Command("sh", "-c", fmt.Sprintf("iptables -t nat -C POSTROUTING -s %s ! -d %s -j MASQUERADE 2>/dev/null", bridgeSubnet, bridgeSubnet))
+	if err := checkCmd.Run(); err != nil {
+		fmt.Println("NAT rule does not exist")
+		return nil
+	}
+
+	delCmd := exec.Command("iptables", "-t", "nat", "-D", "POSTROUTING", "-s", bridgeSubnet, "!", "-d", bridgeSubnet, "-j", "MASQUERADE")
+	if err := delCmd.Run(); err != nil {
+		return fmt.Errorf("failed to remove NAT rule: %v", err)
+	}
+
+	fmt.Println("NAT rule removed")
+	return nil
+}
+
+func (p *LXCPreparer) removeBridge() error {
+	bridgeName := config.DefaultBridgeName
+
+	if _, err := os.Stat(fmt.Sprintf("/sys/class/net/%s", bridgeName)); os.IsNotExist(err) {
+		fmt.Printf("Bridge %s does not exist\n", bridgeName)
+		return nil
+	}
+
+	commands := [][]string{
+		{"ip", "link", "set", "dev", bridgeName, "down"},
+		{"ip", "link", "delete", bridgeName},
+	}
+
+	for _, args := range commands {
+		cmd := exec.Command(args[0], args[1:]...)
+		if err := cmd.Run(); err != nil {
+			return fmt.Errorf("failed to run %v: %v", args, err)
+		}
+	}
+
+	fmt.Printf("Bridge %s removed\n", bridgeName)
+	return nil
+}
+
+func (p *LXCPreparer) cleanDefaultConfig() error {
+	defaultConf := "/etc/lxc/default.conf"
+
+	if _, err := os.Stat(defaultConf); os.IsNotExist(err) {
+		fmt.Println("Default LXC config does not exist")
+		return nil
+	}
+
+	if err := os.Remove(defaultConf); err != nil {
+		return fmt.Errorf("failed to remove default config: %v", err)
+	}
+
+	fmt.Println("Default LXC config removed")
+	return nil
+}
+
+func (i *Initializer) cleanupExistingContainer() error {
+	containerPath := i.container.GetContainerPath()
+
+	if _, err := os.Stat(containerPath); os.IsNotExist(err) {
+		return nil
+	}
+
+	fmt.Printf("Existing container directory found at %s\n", containerPath)
+	
+	cmd := exec.Command("lxc-info", "-n", i.container.Name, "-s")
+	if output, err := cmd.Output(); err == nil {
+		if strings.Contains(string(output), "RUNNING") {
+			fmt.Println("Stopping running container...")
+			stopCmd := exec.Command("lxc-stop", "-k", "-n", i.container.Name)
+			stopCmd.Run()
+		}
+	}
+
+	fmt.Println("Cleaning up existing container...")
+	destroyCmd := exec.Command("lxc-destroy", "-n", i.container.Name)
+	destroyCmd.Run()
+
+	if _, err := os.Stat(containerPath); err == nil {
+		fmt.Printf("Force removing leftover directory: %s\n", containerPath)
+		if err := os.RemoveAll(containerPath); err != nil {
+			return fmt.Errorf("failed to remove existing container directory: %v", err)
+		}
+		fmt.Println("Existing container cleaned up")
+	}
+
+	return nil
+}
 
 func (i *Initializer) createContainer() error {
 	containerPath := i.container.GetContainerPath()
@@ -355,8 +473,15 @@ func (i *Initializer) fixContainerFilesystem() error {
 	rootfs := i.container.GetRootfsPath()
 
 	etcDir := filepath.Join(rootfs, "etc")
-	if err := os.MkdirAll(etcDir, 0755); err != nil {
-		return fmt.Errorf("failed to create /etc directory: %v", err)
+	if stat, err := os.Stat(etcDir); err == nil && stat.IsDir() {
+		fmt.Println("/etc directory already exists")
+	} else if os.IsNotExist(err) {
+		if err := os.MkdirAll(etcDir, 0755); err != nil {
+			return fmt.Errorf("failed to create /etc directory: %v", err)
+		}
+		fmt.Println("Created /etc directory")
+	} else {
+		return fmt.Errorf("failed to stat /etc directory: %v", err)
 	}
 
 	hostnamePath := filepath.Join(etcDir, "hostname")
@@ -365,6 +490,8 @@ func (i *Initializer) fixContainerFilesystem() error {
 			return fmt.Errorf("failed to create /etc/hostname: %v", err)
 		}
 		fmt.Println("Created /etc/hostname")
+	} else {
+		fmt.Println("/etc/hostname already exists")
 	}
 
 	hostsPath := filepath.Join(etcDir, "hosts")
@@ -374,6 +501,8 @@ func (i *Initializer) fixContainerFilesystem() error {
 			return fmt.Errorf("failed to create /etc/hosts: %v", err)
 		}
 		fmt.Println("Created /etc/hosts")
+	} else {
+		fmt.Println("/etc/hosts already exists")
 	}
 
 	fmt.Println("Container filesystem fixed")

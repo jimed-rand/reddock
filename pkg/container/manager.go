@@ -18,7 +18,7 @@ func NewManager() *Manager {
 	cfg, _ := config.Load()
 	return &Manager{
 		config:        cfg,
-		containerName: config.DefaultContainerName,
+		containerName: "",
 	}
 }
 
@@ -125,7 +125,18 @@ func (m *Manager) Remove() error {
 
 	cmd := exec.Command("lxc-destroy", "-n", container.Name)
 	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("failed to remove container: %v", err)
+		fmt.Printf("Warning: lxc-destroy failed: %v\n", err)
+		fmt.Println("Attempting force cleanup...")
+	}
+
+	containerPath := container.GetContainerPath()
+	if _, err := os.Stat(containerPath); err == nil {
+		fmt.Printf("Force removing container directory: %s\n", containerPath)
+		if err := os.RemoveAll(containerPath); err != nil {
+			fmt.Printf("Warning: Could not remove container directory: %v\n", err)
+		} else {
+			fmt.Println("Container directory removed")
+		}
 	}
 
 	fmt.Printf("Remove data directory? [y/N]: ")
@@ -140,7 +151,6 @@ func (m *Manager) Remove() error {
 		}
 	}
 
-	// Remove container from config
 	m.config.RemoveContainer(container.Name)
 	if err := config.Save(m.config); err != nil {
 		fmt.Printf("Warning: Could not update config: %v\n", err)
@@ -245,7 +255,6 @@ func (l *Lister) List() error {
 	return cmd.Run()
 }
 
-// ListRedwayContainers lists all containers managed by Redway
 func (l *Lister) ListRedwayContainers() error {
 	cfg, err := config.Load()
 	if err != nil {

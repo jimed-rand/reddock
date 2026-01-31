@@ -24,6 +24,8 @@ func (c *Command) Execute() error {
 	switch c.Name {
 	case "prepare-lxc":
 		return c.executePrepareLXC()
+	case "unprepare-lxc":
+		return c.executeUnprepareLXC()
 	case "init":
 		return c.executeInit()
 	case "start":
@@ -54,15 +56,19 @@ func (c *Command) executePrepareLXC() error {
 	return preparer.PrepareLXC()
 }
 
+func (c *Command) executeUnprepareLXC() error {
+	preparer := container.NewLXCPreparer()
+	return preparer.UnprepareLXC()
+}
+
 func (c *Command) executeInit() error {
 	var containerName string
 	var image string
 
-	// Parse arguments: init [container-name] [image-url]
 	if len(c.Args) > 0 {
 		containerName = c.Args[0]
 	} else {
-		containerName = config.DefaultContainerName
+		return fmt.Errorf("container name is required. Usage: redway init <container-name> [image-url]")
 	}
 
 	if len(c.Args) > 1 {
@@ -81,7 +87,7 @@ func (c *Command) executeStart() error {
 	if len(c.Args) > 0 {
 		containerName = c.Args[0]
 	} else {
-		containerName = config.DefaultContainerName
+		return fmt.Errorf("container name is required. Usage: redway start <container-name>")
 	}
 
 	mgr := container.NewManagerForContainer(containerName)
@@ -94,7 +100,7 @@ func (c *Command) executeStop() error {
 	if len(c.Args) > 0 {
 		containerName = c.Args[0]
 	} else {
-		containerName = config.DefaultContainerName
+		return fmt.Errorf("container name is required. Usage: redway stop <container-name>")
 	}
 
 	mgr := container.NewManagerForContainer(containerName)
@@ -107,7 +113,7 @@ func (c *Command) executeRestart() error {
 	if len(c.Args) > 0 {
 		containerName = c.Args[0]
 	} else {
-		containerName = config.DefaultContainerName
+		return fmt.Errorf("container name is required. Usage: redway restart <container-name>")
 	}
 
 	mgr := container.NewManagerForContainer(containerName)
@@ -120,7 +126,7 @@ func (c *Command) executeStatus() error {
 	if len(c.Args) > 0 {
 		containerName = c.Args[0]
 	} else {
-		containerName = config.DefaultContainerName
+		return fmt.Errorf("container name is required. Usage: redway status <container-name>")
 	}
 
 	status := utils.NewStatusManager(containerName)
@@ -133,7 +139,7 @@ func (c *Command) executeShell() error {
 	if len(c.Args) > 0 {
 		containerName = c.Args[0]
 	} else {
-		containerName = config.DefaultContainerName
+		return fmt.Errorf("container name is required. Usage: redway shell <container-name>")
 	}
 
 	shell := utils.NewShellManager(containerName)
@@ -146,7 +152,7 @@ func (c *Command) executeAdbConnect() error {
 	if len(c.Args) > 0 {
 		containerName = c.Args[0]
 	} else {
-		containerName = config.DefaultContainerName
+		return fmt.Errorf("container name is required. Usage: redway adb-connect <container-name>")
 	}
 
 	adb := utils.NewAdbManager(containerName)
@@ -159,7 +165,7 @@ func (c *Command) executeRemove() error {
 	if len(c.Args) > 0 {
 		containerName = c.Args[0]
 	} else {
-		containerName = config.DefaultContainerName
+		return fmt.Errorf("container name is required. Usage: redway remove <container-name>")
 	}
 
 	mgr := container.NewManagerForContainer(containerName)
@@ -177,7 +183,7 @@ func (c *Command) executeLog() error {
 	if len(c.Args) > 0 {
 		containerName = c.Args[0]
 	} else {
-		containerName = config.DefaultContainerName
+		return fmt.Errorf("container name is required. Usage: redway log <container-name>")
 	}
 
 	logger := utils.NewLogManager(containerName)

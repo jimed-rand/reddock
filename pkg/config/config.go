@@ -8,12 +8,11 @@ import (
 )
 
 const (
-	DefaultImageURL      = "docker://redroid/redroid:16.0.0_64only-latest"
-	DefaultContainerName = "redroid"
-	DefaultGPUMode       = "guest"
-	DefaultBridgeName    = "redroid0"
-	DefaultBridgeSubnet  = "10.0.4.0/24"
-	DefaultBridgeIP      = "10.0.4.1"
+	DefaultImageURL     = "docker://redroid/redroid:16.0.0_64only-latest"
+	DefaultGPUMode      = "guest"
+	DefaultBridgeName   = "redroid0"
+	DefaultBridgeSubnet = "10.0.4.0/24"
+	DefaultBridgeIP     = "10.0.4.1"
 )
 
 type Container struct {
@@ -45,20 +44,9 @@ func GetDefaultDataPath(containerName string) string {
 }
 
 func GetDefault() *Config {
-	defaultContainer := &Container{
-		Name:        DefaultContainerName,
-		ImageURL:    DefaultImageURL,
-		DataPath:    GetDefaultDataPath(DefaultContainerName),
-		LogFile:     "redroid.log",
-		GPUMode:     DefaultGPUMode,
-		Initialized: false,
-	}
-
 	return &Config{
-		Containers: map[string]*Container{
-			DefaultContainerName: defaultContainer,
-		},
-		LXCReady: false,
+		Containers: make(map[string]*Container),
+		LXCReady:   false,
 	}
 }
 
@@ -79,7 +67,6 @@ func Load() (*Config, error) {
 		return nil, fmt.Errorf("failed to parse config: %v", err)
 	}
 
-	// Ensure containers map is initialized
 	if cfg.Containers == nil {
 		cfg.Containers = make(map[string]*Container)
 	}
@@ -107,7 +94,6 @@ func Save(cfg *Config) error {
 	return nil
 }
 
-// Container helper methods
 func (c *Container) GetContainerPath() string {
 	return filepath.Join("/var/lib/lxc", c.Name)
 }
@@ -120,7 +106,6 @@ func (c *Container) GetRootfsPath() string {
 	return filepath.Join(c.GetContainerPath(), "rootfs")
 }
 
-// Config helper methods for backward compatibility
 func (cfg *Config) GetContainer(name string) *Container {
 	if container, exists := cfg.Containers[name]; exists {
 		return container

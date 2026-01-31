@@ -28,7 +28,7 @@ func (r *Remover) Remove(removeImage bool) error {
 
 	container := r.config.GetContainer(r.containerName)
 	if container == nil {
-		return fmt.Errorf("container '%s' not found", r.containerName)
+		return fmt.Errorf("Container '%s' not found", r.containerName)
 	}
 
 	fmt.Printf("[*] Stopping and removing container '%s'...\n", container.Name)
@@ -61,7 +61,7 @@ func (r *Remover) Remove(removeImage bool) error {
 	// Update config
 	r.config.RemoveContainer(container.Name)
 	if err := config.Save(r.config); err != nil {
-		return fmt.Errorf("failed to save config: %v", err)
+		return fmt.Errorf("Failed to save config: %v", err)
 	}
 
 	fmt.Printf("\nContainer '%s' and its data have been removed successfully.\n", container.Name)

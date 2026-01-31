@@ -68,11 +68,6 @@ install: check-linux build
 	@echo "Installing Reddock to $(DESTDIR)$(BINDIR)..."
 	install -Dm755 $(BINARY) $(DESTDIR)$(BINDIR)/$(BINARY)
 	@echo "Installation complete!"
-	@echo ""
-	@echo "Quick Start:"
-	@echo "  sudo reddock init android13"
-	@echo "  sudo reddock start android13"
-	@echo "  sudo reddock list"
 
 uninstall:
 	@echo "Uninstalling Reddock from $(DESTDIR)$(BINDIR)..."

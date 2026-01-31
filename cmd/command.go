@@ -54,10 +54,10 @@ func (c *Command) executeInit() error {
 	if len(c.Args) > 0 {
 		containerName = c.Args[0]
 	} else {
-		fmt.Print("Enter container name: ")
+		fmt.Print("Enter the Container name: ")
 		_, err := fmt.Scanln(&containerName)
 		if err != nil || containerName == "" {
-			return fmt.Errorf("container name is required")
+			return fmt.Errorf("Container name is Required!")
 		}
 	}
 
@@ -73,7 +73,7 @@ func (c *Command) executeInit() error {
 		var choice int
 		_, err := fmt.Scanln(&choice)
 		if err != nil || choice < 1 || choice > len(config.AvailableImages) {
-			return fmt.Errorf("invalid selection")
+			return fmt.Errorf("Invalid selection")
 		}
 		image = config.AvailableImages[choice-1].URL
 	}
@@ -95,7 +95,7 @@ func (c *Command) executeStart() error {
 	}
 
 	if containerName == "" {
-		return fmt.Errorf("container name is required. Usage: reddock start <container-name> [-v]")
+		return fmt.Errorf("Container name is Required! Usage: reddock start <container-name> [-v]")
 	}
 
 	mgr := container.NewManagerForContainer(containerName)
@@ -108,7 +108,7 @@ func (c *Command) executeStop() error {
 	if len(c.Args) > 0 {
 		containerName = c.Args[0]
 	} else {
-		return fmt.Errorf("container name is required. Usage: reddock stop <container-name>")
+		return fmt.Errorf("Container name is Required! Usage: reddock stop <container-name>")
 	}
 
 	mgr := container.NewManagerForContainer(containerName)
@@ -128,7 +128,7 @@ func (c *Command) executeRestart() error {
 	}
 
 	if containerName == "" {
-		return fmt.Errorf("container name is required. Usage: reddock restart <container-name> [-v]")
+		return fmt.Errorf("Container name is Required! Usage: reddock restart <container-name> [-v]")
 	}
 
 	mgr := container.NewManagerForContainer(containerName)
@@ -141,7 +141,7 @@ func (c *Command) executeStatus() error {
 	if len(c.Args) > 0 {
 		containerName = c.Args[0]
 	} else {
-		return fmt.Errorf("container name is required. Usage: reddock status <container-name>")
+		return fmt.Errorf("Container name is Required! Usage: reddock status <container-name>")
 	}
 
 	status := utils.NewStatusManager(containerName)
@@ -154,7 +154,7 @@ func (c *Command) executeShell() error {
 	if len(c.Args) > 0 {
 		containerName = c.Args[0]
 	} else {
-		return fmt.Errorf("container name is required. Usage: reddock shell <container-name>")
+		return fmt.Errorf("Container name is Required! Usage: reddock shell <container-name>")
 	}
 
 	shell := utils.NewShellManager(containerName)
@@ -167,7 +167,7 @@ func (c *Command) executeAdbConnect() error {
 	if len(c.Args) > 0 {
 		containerName = c.Args[0]
 	} else {
-		return fmt.Errorf("container name is required. Usage: reddock adb-connect <container-name>")
+		return fmt.Errorf("Container name is Required! Usage: reddock adb-connect <container-name>")
 	}
 
 	adb := utils.NewAdbManager(containerName)
@@ -187,7 +187,7 @@ func (c *Command) executeRemove() error {
 	}
 
 	if containerName == "" {
-		return fmt.Errorf("container name is required. Usage: reddock remove <container-name> [--all]")
+		return fmt.Errorf("Container name is Required! Usage: reddock remove <container-name> [--all]")
 	}
 
 	remover := container.NewRemover(containerName)
@@ -205,7 +205,7 @@ func (c *Command) executeLog() error {
 	if len(c.Args) > 0 {
 		containerName = c.Args[0]
 	} else {
-		return fmt.Errorf("container name is required. Usage: reddock log <container-name>")
+		return fmt.Errorf("Container name is Required! Usage: reddock log <container-name>")
 	}
 
 	logger := utils.NewLogManager(containerName)
@@ -216,18 +216,19 @@ func PrintUsage() {
 	fmt.Println("Reddock - Redroid Container Manager")
 	fmt.Println("\nUsage: reddock [command] [options]")
 	fmt.Println("\nCommands:")
-	fmt.Println("  init [<name>] [<image>]        Initialize container (interactive if name/image omitted)")
-	fmt.Println("  start <name> [-v]              Start container (use -v for foreground/logs)")
-	fmt.Println("  stop <name>                    Stop container (name required)")
-	fmt.Println("  restart <name> [-v]            Restart container (use -v for foreground/logs)")
-	fmt.Println("  status <name>                  Show container status (name required)")
-	fmt.Println("  shell <name>                   Enter container shell (name required)")
+	fmt.Println("  init [<name>] [<image>]        Initiate the container (interactive if name/image omitted)")
+	fmt.Println("  start <name> [-v]              Start the container (use -v for foreground/logs)")
+	fmt.Println("  stop <name>                    Stop the container (name required)")
+	fmt.Println("  restart <name> [-v]            Restart the container (use -v for foreground/logs)")
+	fmt.Println("  status <name>                  Show the container status (name required)")
+	fmt.Println("  shell <name>                   Enter the container shell (name required)")
 	fmt.Println("  adb-connect <name>             Show ADB connection command (name required)")
-	fmt.Println("  remove <name> [--all]          Remove container, data, and optionally image (--all)")
+	fmt.Println("  remove <name> [--all]          Remove the container, data, and optionally image (--all)")
 	fmt.Println("  list                           List all Reddock containers")
 	fmt.Println("  log <name>                     Show container logs (name required)")
 	fmt.Println("\nExamples:")
-	fmt.Println("  sudo reddock init android13")
-	fmt.Println("  sudo reddock start android13 -v")
-	fmt.Println("  sudo reddock remove android13 --all")
+	fmt.Println("  reddock init android13")
+	fmt.Println("  reddock start android13 -v")
+	fmt.Println("  reddock remove android13 --all")
+	fmt.Println("\nIf you're not entering root, you need to add the sudo firsts."
 }

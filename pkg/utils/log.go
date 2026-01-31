@@ -31,7 +31,7 @@ func (l *LogManager) Show() error {
 		return fmt.Errorf("container '%s' not found", l.containerName)
 	}
 
-	fmt.Printf("Showing logs for container: %s\n", l.containerName)
+	fmt.Printf("Showing the logs for container: %s\n", l.containerName)
 	fmt.Println("Press Ctrl+C to exit")
 
 	cmd := exec.Command("docker", "logs", "-f", l.containerName)

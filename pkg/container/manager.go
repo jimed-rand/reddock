@@ -34,7 +34,7 @@ func NewManagerForContainer(containerName string) *Manager {
 func (m *Manager) getContainer() (*config.Container, error) {
 	container := m.config.GetContainer(m.containerName)
 	if container == nil {
-		return nil, fmt.Errorf("container '%s' not found", m.containerName)
+		return nil, fmt.Errorf("Container '%s' is not found", m.containerName)
 	}
 	return container, nil
 }
@@ -49,7 +49,7 @@ func (m *Manager) Start(verbose bool) error {
 	}
 
 	if !container.Initialized {
-		return fmt.Errorf("the container '%s' is not initialized. Run 'reddock init %s' first", container.Name, container.Name)
+		return fmt.Errorf("The container '%s' is not initiated. Run 'reddock init %s' first", container.Name, container.Name)
 	}
 
 	if m.IsRunning() {
@@ -68,7 +68,7 @@ func (m *Manager) Start(verbose bool) error {
 			startCmd.Stderr = os.Stderr
 		}
 		if err := startCmd.Run(); err != nil {
-			return fmt.Errorf("failed to start existing container: %v", err)
+			return fmt.Errorf("Failed to start existing container: %v", err)
 		}
 	} else {
 		fmt.Printf("Creating and starting new container '%s'...\n", container.Name)
@@ -99,7 +99,7 @@ func (m *Manager) Start(verbose bool) error {
 		}
 	}
 
-	fmt.Println("The container started successfully")
+	fmt.Println("The Container started successfully")
 	if verbose {
 		fmt.Println("Showing logs (Press Ctrl+C to stop)...")
 		logCmd := m.runtime.Command("logs", "-f", container.Name)

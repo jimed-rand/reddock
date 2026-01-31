@@ -32,7 +32,7 @@ func (a *AdbManager) ShowConnection() error {
 		ip = "localhost"
 	}
 
-	fmt.Println("\nADB Connection Information:")
+	fmt.Println("\nADB Information:")
 	fmt.Println("===========================")
 	fmt.Printf("Default connection: localhost:5555\n")
 	fmt.Printf("Internal IP: %s\n", ip)

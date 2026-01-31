@@ -35,10 +35,10 @@ func (s *StatusManager) Show() error {
 	fmt.Printf("Image: %s\n", cont.ImageURL)
 	fmt.Printf("Data Path: %s\n", cont.GetDataPath())
 	fmt.Printf("GPU Mode: %s\n", cont.GPUMode)
-	fmt.Printf("Initialized: %v\n", cont.Initialized)
+	fmt.Printf("Initiated: %v\n", cont.Initialized)
 
 	if !cont.Initialized {
-		fmt.Printf("\nThe container is not initialized. Run 'reddock init %s' first.\n", cont.Name)
+		fmt.Printf("\nThe container is not initiated. Run 'reddock init %s' first.\n", cont.Name)
 		return nil
 	}
 

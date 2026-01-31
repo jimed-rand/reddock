@@ -25,7 +25,7 @@ func (s *ShellManager) Enter() error {
 		return err
 	}
 	if !s.manager.IsRunning() {
-		return fmt.Errorf("the container '%s' is not running. Start it with 'reddock start %s'", s.containerName, s.containerName)
+		return fmt.Errorf("The container '%s' is not running. Start it with 'reddock start %s'", s.containerName, s.containerName)
 	}
 
 	fmt.Printf("Entering container shell for '%s'...\n", s.containerName)

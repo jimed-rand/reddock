@@ -32,6 +32,15 @@ func (r *Remover) Remove(removeImage bool) error {
 		return fmt.Errorf("Container '%s' not found", r.containerName)
 	}
 
+	if !removeImage {
+		fmt.Print("\nDo you want to also remove the Docker image? [y/N]: ")
+		var response string
+		fmt.Scanln(&response)
+		if response == "y" || response == "Y" || response == "yes" {
+			removeImage = true
+		}
+	}
+
 	steps := []struct {
 		name string
 		fn   func() error
@@ -64,10 +73,13 @@ func (r *Remover) Remove(removeImage bool) error {
 			name string
 			fn   func() error
 		}{
-			name: fmt.Sprintf("Removing image: %s", container.ImageURL),
+			name: fmt.Sprintf("Removing Docker image: %s", container.ImageURL),
 			fn: func() error {
 				if err := r.runtime.RemoveImage(container.ImageURL); err != nil {
 					fmt.Printf("\nWarning: Could not remove image: %v\n", err)
+					fmt.Printf("The image might be in use by other containers or already removed.\n")
+				} else {
+					fmt.Printf("\nImage '%s' removed successfully\n", container.ImageURL)
 				}
 				return nil
 			},
@@ -98,7 +110,12 @@ func (r *Remover) Remove(removeImage bool) error {
 		}
 		bar.Increment()
 	}
-	bar.Finish(fmt.Sprintf("Container '%s' removed successfully", container.Name))
+	
+	finalMsg := fmt.Sprintf("Container '%s' removed successfully", container.Name)
+	if removeImage {
+		finalMsg += " (including image)"
+	}
+	bar.Finish(finalMsg)
 
 	return nil
 }

@@ -19,8 +19,6 @@ func (c *Command) executeAddons() error {
 	switch subCommand {
 	case "list":
 		return c.executeAddonsList()
-	case "install":
-		return c.executeAddonsInstall(subArgs)
 	case "build":
 		return c.executeAddonsBuild(subArgs)
 	default:
@@ -32,18 +30,20 @@ func (c *Command) showAddonsHelp() error {
 	fmt.Println("Addons Management")
 	fmt.Println("\nUsage: reddock addons [command] [options]")
 	fmt.Println("\nCommands:")
-	fmt.Println("  list                           List available addons")
-	fmt.Println("  install <addon> <version>      Install an addon")
-	fmt.Println("  build <name> <version> <addons...>  Build custom image with addons")
+	fmt.Println("  list                                         	List available addons")
+	fmt.Println("  build <n> <version> <addons...> [--push]  		Build custom image with addons")
 	fmt.Println("\nAvailable Addons:")
-	fmt.Println("  houdini       - Intel Houdini ARM translation (x86/x86_64 only)")
-	fmt.Println("  ndk           - NDK ARM translation (x86/x86_64 only)")
-	fmt.Println("  litegapps     - LiteGapps (Google Apps)")
-	fmt.Println("  mindthegapps  - MindTheGapps (Google Apps)")
-	fmt.Println("  opengapps     - OpenGapps (Google Apps, Android 11 only)")
+	fmt.Println("  houdini       		- Intel Houdini ARM translation (x86/x86_64 only)")
+	fmt.Println("  ndk           		- NDK ARM translation (x86/x86_64 only)")
+	fmt.Println("  litegapps     		- LiteGapps (Google Apps)")
+	fmt.Println("  mindthegapps  		- MindTheGapps (Google Apps)")
+	fmt.Println("  opengapps     		- OpenGapps (Google Apps, Android 11 only)")
+	fmt.Println("\nOptions:")
+	fmt.Println("  --push        		Push the built image to Docker Hub (requires authentication)")
 	fmt.Println("\nExamples:")
 	fmt.Println("  reddock addons list")
 	fmt.Println("  reddock addons build android13-gapps 13.0.0 litegapps ndk")
+	fmt.Println("  reddock addons build username/android13:v1 13.0.0 litegapps --push")
 	fmt.Println("  reddock addons build android11-full 11.0.0 opengapps houdini")
 	return nil
 }
@@ -59,36 +59,36 @@ func (c *Command) executeAddonsList() error {
 		addon, _ := manager.GetAddon(name)
 		versions := addon.SupportedVersions()
 		fmt.Printf("%-15s - %s\n", name, addon.Name())
-		fmt.Printf("                Supported versions: %v\n", versions)
+		fmt.Printf("Supported versions: %v\n", versions)
 		fmt.Println()
 	}
 
 	return nil
 }
 
-func (c *Command) executeAddonsInstall(args []string) error {
-	if len(args) < 2 {
-		return fmt.Errorf("usage: reddock addons install <addon> <version>")
-	}
-
-	addonName := args[0]
-	version := args[1]
-	arch := getHostArch()
-
-	manager := addons.NewAddonManager()
-	defer manager.Cleanup()
-
-	return manager.InstallAddon(addonName, version, arch)
-}
-
 func (c *Command) executeAddonsBuild(args []string) error {
 	if len(args) < 3 {
-		return fmt.Errorf("usage: reddock addons build <image-name> <android-version> <addon1> [addon2] ...")
+		return fmt.Errorf("Command invalid! usage: reddock addons build <image-name> <android-version> <addon1> [addon2] ... [--push]")
 	}
 
-	imageName := args[0]
-	version := args[1]
-	addonNames := args[2:]
+	pushToRegistry := false
+	var cleanArgs []string
+	
+	for _, arg := range args {
+		if arg == "--push" {
+			pushToRegistry = true
+		} else {
+			cleanArgs = append(cleanArgs, arg)
+		}
+	}
+
+	if len(cleanArgs) < 3 {
+		return fmt.Errorf("Command invalid! usage: reddock addons build <image-name> <android-version> <addon1> [addon2] ... [--push]")
+	}
+
+	imageName := cleanArgs[0]
+	version := cleanArgs[1]
+	addonNames := cleanArgs[2:]
 	arch := getHostArch()
 
 	manager := addons.NewAddonManager()
@@ -96,12 +96,12 @@ func (c *Command) executeAddonsBuild(args []string) error {
 
 	for _, addonName := range addonNames {
 		if _, err := manager.GetAddon(addonName); err != nil {
-			return fmt.Errorf("invalid addon: %s", addonName)
+			return fmt.Errorf("Invalid addon: %s", addonName)
 		}
 	}
 
 	baseImage := fmt.Sprintf("redroid/redroid:%s-latest", version)
-	return manager.BuildImage(baseImage, imageName, version, arch, addonNames)
+	return manager.BuildCustomImage(baseImage, imageName, version, arch, addonNames, pushToRegistry)
 }
 
 func getHostArch() string {

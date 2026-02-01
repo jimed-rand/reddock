@@ -1,182 +1,231 @@
-package container
+package addons
 
 import (
 	"fmt"
 	"os"
-	"reddock/pkg/config"
+	"os/exec"
+	"path/filepath"
 	"reddock/pkg/ui"
+	"strings"
 )
 
-type Manager struct {
-	config        *config.Config
-	containerName string
-	runtime       Runtime
+type AddonManager struct {
+	availableAddons map[string]Addon
+	workDir         string
 }
 
-func NewManager() *Manager {
-	cfg, _ := config.Load()
-	return &Manager{
-		config:        cfg,
-		containerName: "",
-		runtime:       NewRuntime(),
+func NewAddonManager() *AddonManager {
+	addons := map[string]Addon{
+		"houdini":      NewHoudiniAddon(),
+		"ndk":          NewNDKAddon(),
+		"litegapps":    NewLiteGappsAddon(),
+		"mindthegapps": NewMindTheGappsAddon(),
+		"opengapps":    NewOpenGappsAddon(),
+	}
+
+	return &AddonManager{
+		availableAddons: addons,
+		workDir:         "/tmp/reddock-addons",
 	}
 }
 
-func NewManagerForContainer(containerName string) *Manager {
-	cfg, _ := config.Load()
-	return &Manager{
-		config:        cfg,
-		containerName: containerName,
-		runtime:       NewRuntime(),
+func (am *AddonManager) GetAddon(name string) (Addon, error) {
+	addon, ok := am.availableAddons[name]
+	if !ok {
+		return nil, fmt.Errorf("Addon '%s' not found", name)
 	}
+	return addon, nil
 }
 
-func (m *Manager) getContainer() (*config.Container, error) {
-	container := m.config.GetContainer(m.containerName)
-	if container == nil {
-		return nil, fmt.Errorf("Container '%s' is not found", m.containerName)
+func (am *AddonManager) ListAddons() []string {
+	var names []string
+	for name := range am.availableAddons {
+		names = append(names, name)
 	}
-	return container, nil
+	return names
 }
 
-func (m *Manager) Start(verbose bool) error {
-	if err := CheckRoot(); err != nil {
-		return err
-	}
-	container, err := m.getContainer()
+func (am *AddonManager) PrepareAddon(addonName, version, arch string) error {
+	addon, err := am.GetAddon(addonName)
 	if err != nil {
 		return err
 	}
 
-	if !container.Initialized {
-		return fmt.Errorf("The container '%s' is not initiated. Run 'reddock init %s' first", container.Name, container.Name)
+	if !addon.IsSupported(version) {
+		return fmt.Errorf("%s does not support Android %s", addon.Name(), version)
 	}
 
-	if m.IsRunning() {
-		fmt.Printf("The container '%s' is already running\n", container.Name)
-		return nil
+	if err := ensureDir(am.workDir); err != nil {
+		return err
 	}
 
-	// Check if container exists but is stopped
-	exists := m.runtime.Exists(container.Name)
+	spinner := ui.NewSpinner(fmt.Sprintf("Preparing %s...", addon.Name()))
+	spinner.Start()
+	defer func() {
+		if !spinner.IsDone() {
+			spinner.Finish("Preparation interrupted")
+		}
+	}()
 
-	if exists {
-		msg := fmt.Sprintf("Starting existing container '%s'...", container.Name)
-		if verbose {
-			fmt.Println(msg)
-		} else {
-			s := ui.NewSpinner(msg)
-			s.Start()
-			defer s.Finish("Container started successfully")
-		}
+	err = addon.Install(version, arch, am.workDir, func(msg string) {
+		spinner.SetMessage(msg)
+	})
+	if err != nil {
+		spinner.Finish(fmt.Sprintf("Failed to prepare %s", addon.Name()))
+		return err
+	}
+	spinner.Finish(fmt.Sprintf("Successfully prepared %s", addon.Name()))
+	return nil
+}
 
-		startCmd := m.runtime.Command("start", container.Name)
-		if verbose {
-			startCmd.Stdout = os.Stdout
-			startCmd.Stderr = os.Stderr
-		}
-		if err := startCmd.Run(); err != nil {
-			return fmt.Errorf("Failed to start existing container: %v", err)
-		}
-	} else {
-		msg := fmt.Sprintf("Creating and starting new container '%s'...", container.Name)
-		if verbose {
-			fmt.Println(msg)
-		} else {
-			s := ui.NewSpinner(msg)
-			s.Start()
-			defer s.Finish("Container created and started successfully")
-		}
+func (am *AddonManager) BuildDockerfile(baseImage string, addons []string) (string, error) {
+	var dockerfile strings.Builder
 
-		// Map GPU mode to redroid param
-		gpuParam := "auto"
-		if container.GPUMode != "" {
-			gpuParam = container.GPUMode
-		}
+	dockerfile.WriteString(fmt.Sprintf("FROM %s\n", baseImage))
 
-		args := []string{
-			"run", "-itd",
-			"--privileged",
-			"--name", container.Name,
-			"-v", fmt.Sprintf("%s:/data", container.GetDataPath()),
-			"-p", fmt.Sprintf("%d:5555", container.Port),
-			container.ImageURL,
-			"androidboot.redroid_gpu_mode=" + gpuParam,
+	for _, addonName := range addons {
+		addon, err := am.GetAddon(addonName)
+		if err != nil {
+			return "", err
 		}
-
-		runCmd := m.runtime.Command(args...)
-		if verbose {
-			runCmd.Stdout = os.Stdout
-			runCmd.Stderr = os.Stderr
-		}
-		if err := runCmd.Run(); err != nil {
-			return fmt.Errorf("failed to run container: %v", err)
+		instructions := addon.DockerfileInstructions()
+		if instructions != "" {
+			dockerfile.WriteString(instructions)
 		}
 	}
 
-	if verbose {
-		fmt.Println("The Container started successfully")
-		fmt.Println("Showing logs (Press Ctrl+C to stop)...")
-		logCmd := m.runtime.Command("logs", "-f", container.Name)
-		logCmd.Stdout = os.Stdout
-		logCmd.Stderr = os.Stderr
-		logCmd.Run()
+	return dockerfile.String(), nil
+}
+
+func (am *AddonManager) BuildCustomImage(baseImage, targetImage, version, arch string, addonNames []string, pushToRegistry bool) error {
+	if err := ensureDir(am.workDir); err != nil {
+		return err
 	}
 
-	fmt.Println("\nNext steps:")
-	fmt.Printf("  reddock status %s       # Check container status\n", container.Name)
-	fmt.Printf("  reddock adb-connect %s  # Get ADB connection info\n", container.Name)
+	fmt.Println("\n=== Building custom Redroid Image ===")
+	fmt.Printf("Base Image: %s\n", baseImage)
+	fmt.Printf("Target Image: %s\n", targetImage)
+	fmt.Printf("Addons: %v\n\n", addonNames)
+
+	runtime := getContainerRuntime()
+
+	fmt.Printf("Pulling base image %s...\n", baseImage)
+	if err := pullImage(runtime, baseImage); err != nil {
+		return fmt.Errorf("Failed to pull base image: %v", err)
+	}
+	fmt.Println("Base image pulled successfully\n")
+
+	for _, addonName := range addonNames {
+		if err := am.PrepareAddon(addonName, version, arch); err != nil {
+			fmt.Printf("Warning: Failed to prepare %s: %v\n", addonName, err)
+			fmt.Printf("Continuing without %s...\n", addonName)
+		}
+	}
+
+	dockerfileContent, err := am.BuildDockerfile(baseImage, addonNames)
+	if err != nil {
+		return err
+	}
+
+	dockerfilePath := filepath.Join(am.workDir, "Dockerfile")
+	if err := os.WriteFile(dockerfilePath, []byte(dockerfileContent), 0644); err != nil {
+		return fmt.Errorf("Failed to write Dockerfile: %v", err)
+	}
+
+	fmt.Println("Dockerfile created:")
+	fmt.Println(dockerfileContent)
+
+	spinner := ui.NewSpinner("Building Docker image...")
+	spinner.Start()
+
+	cmd := exec.Command(runtime, "build", "-t", targetImage, am.workDir)
+	output, err := cmd.CombinedOutput()
+
+	if err != nil {
+		spinner.Finish("Failed to build Docker image")
+		fmt.Println(string(output))
+		return fmt.Errorf("Failed to build Docker image: %v", err)
+	}
+	spinner.Finish(fmt.Sprintf("Successfully built %s", targetImage))
+
+	if pushToRegistry {
+		if err := am.PushToRegistry(runtime, targetImage); err != nil {
+			return fmt.Errorf("Failed to push to registry: %v", err)
+		}
+	}
 
 	return nil
 }
 
-func (m *Manager) Stop() error {
-	if err := CheckRoot(); err != nil {
-		return err
+func (am *AddonManager) PushToRegistry(runtime, imageName string) error {
+	fmt.Println("\n=== Publishing the image to Docker Hub ===")
+
+	if !strings.Contains(imageName, "/") {
+		return fmt.Errorf("The image name must include username/repository format (e.g., username/image:tag)")
 	}
-	container, err := m.getContainer()
+
+	fmt.Println("You need to authenticate with Docker Hub first.")
+	fmt.Print("Do you want to login now? [y/N]: ")
+	var doLogin string
+	fmt.Scanln(&doLogin)
+
+	if strings.ToLower(doLogin) == "y" || strings.ToLower(doLogin) == "yes" {
+		fmt.Print("Docker Hub username: ")
+		var username string
+		fmt.Scanln(&username)
+
+		fmt.Println("Please enter your Docker Hub password or access token:")
+		loginCmd := exec.Command(runtime, "login", "-u", username, "--password-stdin")
+		loginCmd.Stdin = os.Stdin
+		loginCmd.Stdout = os.Stdout
+		loginCmd.Stderr = os.Stderr
+
+		if err := loginCmd.Run(); err != nil {
+			return fmt.Errorf("login failed: %v", err)
+		}
+		fmt.Println("Login successful!\n")
+	}
+
+	spinner := ui.NewSpinner(fmt.Sprintf("Pushing %s to Docker Hub...", imageName))
+	spinner.Start()
+
+	pushCmd := exec.Command(runtime, "push", imageName)
+	output, err := pushCmd.CombinedOutput()
+
 	if err != nil {
-		return err
+		spinner.Finish("Failed to push image")
+		fmt.Println(string(output))
+		return fmt.Errorf("Push failed: %v", err)
 	}
 
-	if !m.IsRunning() {
-		fmt.Printf("The container '%s' is not running\n", container.Name)
-		return nil
-	}
-
-	msg := fmt.Sprintf("Stopping the container '%s'...", container.Name)
-	s := ui.NewSpinner(msg)
-	s.Start()
-
-	if err := m.runtime.Stop(container.Name); err != nil {
-		// Stop returns error?
-		return fmt.Errorf("failed to stop container: %v", err)
-	}
-	s.Finish("Container stopped successfully")
+	spinner.Finish(fmt.Sprintf("Successfully pushed %s to Docker Hub", imageName))
+	fmt.Printf("\nYour image is now available at: https://hub.docker.com/r/%s\n", imageName)
 
 	return nil
 }
 
-func (m *Manager) Restart(verbose bool) error {
-	if err := m.Stop(); err != nil {
-		fmt.Printf("Warning: Stop failed: %v\n", err)
-	}
-	return m.Start(verbose)
-}
-
-func (m *Manager) IsRunning() bool {
-	return m.runtime.IsRunning(m.containerName)
-}
-
-func (m *Manager) GetIP() (string, error) {
-	// For Docker/Podman, we usually connect via localhost if ports are mapped
-	// But if we want the internal IP:
-	ip, err := m.runtime.Inspect(m.containerName, "{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}")
+func (am *AddonManager) GetSupportedVersions(addonName string) ([]string, error) {
+	addon, err := am.GetAddon(addonName)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
-	if ip == "" {
-		return "localhost", nil // Return localhost as fallback for mapped ports
+	return addon.SupportedVersions(), nil
+}
+
+func (am *AddonManager) Cleanup() error {
+	return os.RemoveAll(am.workDir)
+}
+
+func getContainerRuntime() string {
+	if _, err := exec.LookPath("podman"); err == nil {
+		return "podman"
 	}
-	return ip, nil
+	return "docker"
+}
+
+func pullImage(runtime, image string) error {
+	cmd := exec.Command(runtime, "pull", image)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
 }

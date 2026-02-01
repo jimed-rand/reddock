@@ -45,7 +45,7 @@ func (am *AddonManager) ListAddons() []string {
 	return names
 }
 
-func (am *AddonManager) InstallAddon(addonName, version, arch string) error {
+func (am *AddonManager) PrepareAddon(addonName, version, arch string) error {
 	addon, err := am.GetAddon(addonName)
 	if err != nil {
 		return err
@@ -59,12 +59,11 @@ func (am *AddonManager) InstallAddon(addonName, version, arch string) error {
 		return err
 	}
 
-	spinner := ui.NewSpinner(fmt.Sprintf("Installing %s...", addon.Name()))
+	spinner := ui.NewSpinner(fmt.Sprintf("Preparing %s...", addon.Name()))
 	spinner.Start()
 	defer func() {
-		// Stop spinner if it's still running (in case of error before finish)
 		if !spinner.IsDone() {
-			spinner.Finish("Installation interrupted")
+			spinner.Finish("Preparation interrupted")
 		}
 	}()
 
@@ -72,10 +71,10 @@ func (am *AddonManager) InstallAddon(addonName, version, arch string) error {
 		spinner.SetMessage(msg)
 	})
 	if err != nil {
-		spinner.Finish(fmt.Sprintf("Failed to install %s", addon.Name()))
+		spinner.Finish(fmt.Sprintf("Failed to prepare %s", addon.Name()))
 		return err
 	}
-	spinner.Finish(fmt.Sprintf("Successfully installed %s", addon.Name()))
+	spinner.Finish(fmt.Sprintf("Successfully prepared %s", addon.Name()))
 	return nil
 }
 
@@ -92,28 +91,33 @@ func (am *AddonManager) BuildDockerfile(baseImage string, addons []string) (stri
 		instructions := addon.DockerfileInstructions()
 		if instructions != "" {
 			dockerfile.WriteString(instructions)
-		} else {
-			// Fallback (should not happen if all addons implement instructions correctly)
-			dockerfile.WriteString(fmt.Sprintf("# No instructions for %s\n", addonName))
 		}
 	}
 
 	return dockerfile.String(), nil
 }
 
-func (am *AddonManager) BuildImage(baseImage, targetImage, version, arch string, addonNames []string) error {
+func (am *AddonManager) BuildCustomImage(baseImage, targetImage, version, arch string, addonNames []string, pushToRegistry bool) error {
 	if err := ensureDir(am.workDir); err != nil {
 		return err
 	}
 
-	fmt.Println("\n=== Building Custom Redroid Image ===")
+	fmt.Println("\n=== Building custom Redroid Image ===")
 	fmt.Printf("Base Image: %s\n", baseImage)
 	fmt.Printf("Target Image: %s\n", targetImage)
 	fmt.Printf("Addons: %v\n\n", addonNames)
 
+	runtime := getContainerRuntime()
+
+	fmt.Printf("Pulling base image %s...\n", baseImage)
+	if err := pullImage(runtime, baseImage); err != nil {
+		return fmt.Errorf("Failed to pull base image: %v", err)
+	}
+	fmt.Println("Base image pulled successfully\n")
+
 	for _, addonName := range addonNames {
-		if err := am.InstallAddon(addonName, version, arch); err != nil {
-			fmt.Printf("Warning: Failed to install %s: %v\n", addonName, err)
+		if err := am.PrepareAddon(addonName, version, arch); err != nil {
+			fmt.Printf("Warning: Failed to prepare %s: %v\n", addonName, err)
 			fmt.Printf("Continuing without %s...\n", addonName)
 		}
 	}
@@ -125,7 +129,7 @@ func (am *AddonManager) BuildImage(baseImage, targetImage, version, arch string,
 
 	dockerfilePath := filepath.Join(am.workDir, "Dockerfile")
 	if err := os.WriteFile(dockerfilePath, []byte(dockerfileContent), 0644); err != nil {
-		return fmt.Errorf("failed to write Dockerfile: %v", err)
+		return fmt.Errorf("Failed to write Dockerfile: %v", err)
 	}
 
 	fmt.Println("Dockerfile created:")
@@ -134,18 +138,68 @@ func (am *AddonManager) BuildImage(baseImage, targetImage, version, arch string,
 	spinner := ui.NewSpinner("Building Docker image...")
 	spinner.Start()
 
-	cmd := exec.Command("docker", "build", "-t", targetImage, am.workDir)
-	// cmd.Stdout = os.Stdout // We don't want docker output to mess up spinner
-	// cmd.Stderr = os.Stderr
-	// But catching specific errors might be good. For now let's just capture output
+	cmd := exec.Command(runtime, "build", "-t", targetImage, am.workDir)
 	output, err := cmd.CombinedOutput()
 
 	if err != nil {
 		spinner.Finish("Failed to build Docker image")
 		fmt.Println(string(output))
-		return fmt.Errorf("failed to build Docker image: %v", err)
+		return fmt.Errorf("Failed to build Docker image: %v", err)
 	}
 	spinner.Finish(fmt.Sprintf("Successfully built %s", targetImage))
+
+	if pushToRegistry {
+		if err := am.PushToRegistry(runtime, targetImage); err != nil {
+			return fmt.Errorf("Failed to push to registry: %v", err)
+		}
+	}
+
+	return nil
+}
+
+func (am *AddonManager) PushToRegistry(runtime, imageName string) error {
+	fmt.Println("\n=== Publishing to Docker Hub ===")
+
+	if !strings.Contains(imageName, "/") {
+		return fmt.Errorf("The image name must include username/repository format (e.g., username/image:tag)")
+	}
+
+	fmt.Println("You need to authenticate with Docker Hub first.")
+	fmt.Print("Do you want to login now? [y/N]: ")
+	var doLogin string
+	fmt.Scanln(&doLogin)
+
+	if strings.ToLower(doLogin) == "y" || strings.ToLower(doLogin) == "yes" {
+		fmt.Print("Docker Hub username: ")
+		var username string
+		fmt.Scanln(&username)
+
+		fmt.Println("Please enter your Docker Hub password or access token:")
+		loginCmd := exec.Command(runtime, "login", "-u", username, "--password-stdin")
+		loginCmd.Stdin = os.Stdin
+		loginCmd.Stdout = os.Stdout
+		loginCmd.Stderr = os.Stderr
+
+		if err := loginCmd.Run(); err != nil {
+			return fmt.Errorf("login failed: %v", err)
+		}
+		fmt.Println("Login successful!\n")
+	}
+
+	spinner := ui.NewSpinner(fmt.Sprintf("Pushing %s to Docker Hub...", imageName))
+	spinner.Start()
+
+	pushCmd := exec.Command(runtime, "push", imageName)
+	output, err := pushCmd.CombinedOutput()
+
+	if err != nil {
+		spinner.Finish("Failed to push image")
+		fmt.Println(string(output))
+		return fmt.Errorf("push failed: %v", err)
+	}
+
+	spinner.Finish(fmt.Sprintf("Successfully pushed %s to Docker Hub", imageName))
+	fmt.Printf("\nYour image is now available at: https://hub.docker.com/r/%s\n", imageName)
 
 	return nil
 }
@@ -160,4 +214,18 @@ func (am *AddonManager) GetSupportedVersions(addonName string) ([]string, error)
 
 func (am *AddonManager) Cleanup() error {
 	return os.RemoveAll(am.workDir)
+}
+
+func getContainerRuntime() string {
+	if _, err := exec.LookPath("podman"); err == nil {
+		return "podman"
+	}
+	return "docker"
+}
+
+func pullImage(runtime, image string) error {
+	cmd := exec.Command(runtime, "pull", image)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
 }

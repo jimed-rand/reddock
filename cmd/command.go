@@ -57,6 +57,8 @@ func (c *Command) Execute() error {
 		return c.executeVersion()
 	case "dockerfile":
 		return c.executeDockerfile()
+	case "addons":
+		return c.executeAddons()
 	default:
 		return fmt.Errorf("Unknown command: %s", c.Name)
 	}
@@ -79,7 +81,6 @@ func (c *Command) executeInit() error {
 
 	if len(c.Args) > 1 {
 		image = c.Args[1]
-		// If provided via CLI, check if it's official to offer addons
 		if strings.HasPrefix(image, "redroid/redroid") {
 			offerAddons = true
 		}
@@ -95,16 +96,15 @@ func (c *Command) executeInit() error {
 		fmt.Scanln(&choice)
 
 		if choice < 1 || choice > len(config.AvailableImages)+1 {
-			return fmt.Errorf("invalid selection")
+			return fmt.Errorf("Invalid selection!")
 		}
 
 		if choice == len(config.AvailableImages)+1 {
 			fmt.Print("Enter custom image URL: ")
 			fmt.Scanln(&image)
 			if image == "" {
-				return fmt.Errorf("image URL is required")
+				return fmt.Errorf("Image URL is required!")
 			}
-			// Custom image: Do NOT offer addons, use as is.
 			offerAddons = false
 		} else {
 			image = config.AvailableImages[choice-1].URL
@@ -114,7 +114,6 @@ func (c *Command) executeInit() error {
 		}
 	}
 
-	// Addon selection (Only for official images)
 	if offerAddons {
 		fmt.Print("\nDo you want to install addons? [y/N]: ")
 		var installAddons string
@@ -158,17 +157,34 @@ func (c *Command) executeInit() error {
 					fmt.Scanln(&version)
 				}
 
-				// Determine architecture
 				arch := "x86_64"
 				if runtime.GOARCH == "arm64" {
 					arch = "arm64"
 				}
 
 				customImageName := fmt.Sprintf("reddock-custom:%s-%s", containerName, version)
+				
+				fmt.Print("\nDo you want to publish this image to Docker Hub? [y/N]: ")
+				var publishImage string
+				fmt.Scanln(&publishImage)
+				
+				pushToRegistry := false
+				if strings.ToLower(publishImage) == "y" || strings.ToLower(publishImage) == "yes" {
+					fmt.Print("Enter Docker Hub image name (format: username/repository:tag): ")
+					reader := bufio.NewReader(os.Stdin)
+					dockerHubName, _ := reader.ReadString('\n')
+					dockerHubName = strings.TrimSpace(dockerHubName)
+					
+					if dockerHubName != "" {
+						customImageName = dockerHubName
+						pushToRegistry = true
+					}
+				}
+				
 				fmt.Printf("\nBuilding custom image '%s' with addons: %v\n", customImageName, selectedAddons)
 
-				if err := am.BuildImage(image, customImageName, version, arch, selectedAddons); err != nil {
-					return fmt.Errorf("failed to build custom image: %v", err)
+				if err := am.BuildCustomImage(image, customImageName, version, arch, selectedAddons, pushToRegistry); err != nil {
+					return fmt.Errorf("Failed to build custom image: %v", err)
 				}
 				image = customImageName
 			}
@@ -273,22 +289,22 @@ func (c *Command) executeAdbConnect() error {
 
 func (c *Command) executeRemove() error {
 	var containerName string
-	removeAll := false
+	removeImage := false
 
 	for _, arg := range c.Args {
-		if arg == "--all" || arg == "-a" {
-			removeAll = true
+		if arg == "--image" || arg == "-i" {
+			removeImage = true
 		} else if containerName == "" {
 			containerName = arg
 		}
 	}
 
 	if containerName == "" {
-		return fmt.Errorf("Container name is required! Usage: reddock remove <container-name> [--all]")
+		return fmt.Errorf("Container name is required! Usage: reddock remove <container-name> [--image]")
 	}
 
 	remover := container.NewRemover(containerName)
-	return remover.Remove(removeAll)
+	return remover.Remove(removeImage)
 }
 
 func (c *Command) executeList() error {
@@ -331,21 +347,24 @@ func PrintUsage() {
 	fmt.Printf("Reddock v%s\n", Version)
 	fmt.Println("\nUsage: reddock [command] [options]")
 	fmt.Println("\nCommands:")
-	fmt.Println("  init [<name>] [<image>]        Initialize container (interactive if name/image omitted)")
-	fmt.Println("  start <name> [-v]              Start container (use -v for foreground/logs)")
-	fmt.Println("  stop <name>                    Stop container (name required)")
-	fmt.Println("  restart <name> [-v]            Restart container (use -v for foreground/logs)")
-	fmt.Println("  status <name>                  Show container status (name required)")
-	fmt.Println("  shell <name>                   Enter container shell (name required)")
-	fmt.Println("  adb-connect <name>             Show ADB connection command (name required)")
-	fmt.Println("  remove <name> [--all]          Remove container, data, and optionally image (--all)")
-	fmt.Println("  list                           List all Reddock containers")
-	fmt.Println("  log <name>                     Show container logs (name required)")
-	fmt.Println("  prune                          Remove unused images")
-	fmt.Println("  dockerfile <name>              Show the Dockerfile for a container")
-	fmt.Println("  version                        Show version information")
+	fmt.Println("  init [<n>] [<image>]        		Initialize container (interactive if name/image omitted)")
+	fmt.Println("  start <n> [-v]              		Start container (use -v for foreground/logs)")
+	fmt.Println("  stop <n>                    		Stop container (name required)")
+	fmt.Println("  restart <n> [-v]            		Restart container (use -v for foreground/logs)")
+	fmt.Println("  status <n>                  		Show container status (name required)")
+	fmt.Println("  shell <n>                   		Enter container shell (name required)")
+	fmt.Println("  adb-connect <n>             		Show ADB connection command (name required)")
+	fmt.Println("  remove <n> [--image]        		Remove container and data (--image to also remove image)")
+	fmt.Println("  list                           	List all Reddock containers")
+	fmt.Println("  log <n>                     		Show container logs (name required)")
+	fmt.Println("  prune                          	Remove unused images")
+	fmt.Println("  dockerfile <n>              		Show the Dockerfile for a container")
+	fmt.Println("  addons [command]               	Manage addons")
+	fmt.Println("  version                        	Show version information")
 	fmt.Println("\nExamples:")
 	fmt.Println("  sudo reddock init android13")
 	fmt.Println("  sudo reddock start android13 -v")
-	fmt.Println("  sudo reddock remove android13 --all")
+	fmt.Println("  sudo reddock remove android13")
+	fmt.Println("  sudo reddock remove android13 --image  # Also remove Docker image")
+	fmt.Println("  sudo reddock addons build custom-android13 13.0.0 litegapps ndk")
 }

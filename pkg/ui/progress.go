@@ -148,3 +148,10 @@ func (p *Progress) Finish(finalMsg string) {
 	}
 	p.mu.Unlock()
 }
+
+// IsDone checks if the progress is finished
+func (p *Progress) IsDone() bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.isFinished
+}

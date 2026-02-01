@@ -1,8 +1,13 @@
 package cmd
 
 import (
+	"bufio"
 	"fmt"
+	"os"
+	"runtime"
+	"strings"
 
+	"reddock/pkg/addons"
 	"reddock/pkg/config"
 	"reddock/pkg/container"
 	"reddock/pkg/utils"
@@ -50,6 +55,8 @@ func (c *Command) Execute() error {
 		return c.executePrune()
 	case "version":
 		return c.executeVersion()
+	case "dockerfile":
+		return c.executeDockerfile()
 	default:
 		return fmt.Errorf("Unknown command: %s", c.Name)
 	}
@@ -58,6 +65,7 @@ func (c *Command) Execute() error {
 func (c *Command) executeInit() error {
 	var containerName string
 	var image string
+	offerAddons := false
 
 	if len(c.Args) > 0 {
 		containerName = c.Args[0]
@@ -71,19 +79,100 @@ func (c *Command) executeInit() error {
 
 	if len(c.Args) > 1 {
 		image = c.Args[1]
+		// If provided via CLI, check if it's official to offer addons
+		if strings.HasPrefix(image, "redroid/redroid") {
+			offerAddons = true
+		}
 	} else {
 		fmt.Println("\nAvailable Redroid Images:")
 		for i, img := range config.AvailableImages {
 			fmt.Printf("[%d] %s (%s)\n", i+1, img.Name, img.URL)
 		}
+		fmt.Printf("[%d] Custom Image (Enter your own Docker image)\n", len(config.AvailableImages)+1)
 
-		fmt.Printf("\nSelect an image [1-%d]: ", len(config.AvailableImages))
+		fmt.Printf("\nSelect an image [1-%d]: ", len(config.AvailableImages)+1)
 		var choice int
-		_, err := fmt.Scanln(&choice)
-		if err != nil || choice < 1 || choice > len(config.AvailableImages) {
+		fmt.Scanln(&choice)
+
+		if choice < 1 || choice > len(config.AvailableImages)+1 {
 			return fmt.Errorf("invalid selection")
 		}
-		image = config.AvailableImages[choice-1].URL
+
+		if choice == len(config.AvailableImages)+1 {
+			fmt.Print("Enter custom image URL: ")
+			fmt.Scanln(&image)
+			if image == "" {
+				return fmt.Errorf("image URL is required")
+			}
+			// Custom image: Do NOT offer addons, use as is.
+			offerAddons = false
+		} else {
+			image = config.AvailableImages[choice-1].URL
+			if strings.HasPrefix(image, "redroid/redroid") {
+				offerAddons = true
+			}
+		}
+	}
+
+	// Addon selection (Only for official images)
+	if offerAddons {
+		fmt.Print("\nDo you want to install addons? [y/N]: ")
+		var installAddons string
+		fmt.Scanln(&installAddons)
+
+		if strings.ToLower(installAddons) == "y" || strings.ToLower(installAddons) == "yes" {
+			am := addons.NewAddonManager()
+			availableAddons := am.ListAddons()
+
+			fmt.Println("\nAvailable Addons:")
+			for i, name := range availableAddons {
+				fmt.Printf("[%d] %s\n", i+1, name)
+			}
+
+			fmt.Print("\nEnter addon numbers separated by comma (e.g., 1,3): ")
+
+			reader := bufio.NewReader(os.Stdin)
+			input, _ := reader.ReadString('\n')
+			input = strings.TrimSpace(input)
+
+			var selectedAddons []string
+			if input != "" {
+				parts := strings.Split(input, ",")
+				for _, p := range parts {
+					p = strings.TrimSpace(p)
+					if p == "" {
+						continue
+					}
+					var idx int
+					fmt.Sscanf(p, "%d", &idx)
+					if idx >= 1 && idx <= len(availableAddons) {
+						selectedAddons = append(selectedAddons, availableAddons[idx-1])
+					}
+				}
+			}
+
+			if len(selectedAddons) > 0 {
+				version := config.ExtractVersionFromImage(image)
+				if version == "" {
+					fmt.Print("Could not detect Android version. Please enter version (e.g., 11.0.0): ")
+					fmt.Scanln(&version)
+				}
+
+				// Determine architecture
+				arch := "x86_64"
+				if runtime.GOARCH == "arm64" {
+					arch = "arm64"
+				}
+
+				customImageName := fmt.Sprintf("reddock-custom:%s-%s", containerName, version)
+				fmt.Printf("\nBuilding custom image '%s' with addons: %v\n", customImageName, selectedAddons)
+
+				if err := am.BuildImage(image, customImageName, version, arch, selectedAddons); err != nil {
+					return fmt.Errorf("failed to build custom image: %v", err)
+				}
+				image = customImageName
+			}
+		}
 	}
 
 	init := container.NewInitializer(containerName, image)
@@ -225,6 +314,19 @@ func (c *Command) executePrune() error {
 	return pruner.Prune()
 }
 
+func (c *Command) executeDockerfile() error {
+	var containerName string
+
+	if len(c.Args) > 0 {
+		containerName = c.Args[0]
+	} else {
+		return fmt.Errorf("Container name is required! Usage: reddock dockerfile <container-name>")
+	}
+
+	generator := container.NewDockerfileGenerator(containerName)
+	return generator.Show()
+}
+
 func PrintUsage() {
 	fmt.Printf("Reddock v%s\n", Version)
 	fmt.Println("\nUsage: reddock [command] [options]")
@@ -240,6 +342,7 @@ func PrintUsage() {
 	fmt.Println("  list                           List all Reddock containers")
 	fmt.Println("  log <name>                     Show container logs (name required)")
 	fmt.Println("  prune                          Remove unused images")
+	fmt.Println("  dockerfile <name>              Show the Dockerfile for a container")
 	fmt.Println("  version                        Show version information")
 	fmt.Println("\nExamples:")
 	fmt.Println("  sudo reddock init android13")

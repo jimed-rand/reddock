@@ -39,13 +39,6 @@ var AvailableImages = []RedroidImage{
 	{"Android 13", "redroid/redroid:13.0.0-latest"},
 	{"Android 13 (x86_64 only)", "redroid/redroid:13.0.0_64only-latest"},
 	{"Android 13 (NDK ChromeOS - AMD64/x86_64)", "erstt/redroid:13.0.0_ndk_ChromeOS"},
-	{"Android 14", "redroid/redroid:14.0.0-latest"},
-	{"Android 14 (x86_64 only)", "redroid/redroid:14.0.0_64only-latest"},
-	{"Android 15", "redroid/redroid:15.0.0-latest"},
-	{"Android 15 (x86_64 only)", "redroid/redroid:15.0.0_64only-latest"},
-	{"Android 15 (NDK AVD - AMD64/x86_64)", "erstt/redroid:15.0.0_ndk_AVD"},
-	{"Android 16", "redroid/redroid:16.0.0-latest"},
-	{"Android 16 (x86_64 only)", "redroid/redroid:16.0.0_64only-latest"},
 }
 
 type Container struct {
@@ -193,13 +186,6 @@ func ExtractVersionFromImage(imageURL string) string {
 		"13.0.0",
 		"13.0.0_64only",
 		"13.0.0_ndk_ChromeOS",
-		"14.0.0",
-		"14.0.0_64only",
-		"15.0.0",
-		"15.0.0_64only",
-		"15.0.0_ndk_AVD",
-		"16.0.0",
-		"16.0.0_64only",
 	}
 
 	for _, v := range knownVersions {

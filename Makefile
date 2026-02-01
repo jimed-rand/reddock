@@ -2,7 +2,7 @@
 
 # Configuration
 BINARY = reddock
-VERSION = 2.22.1
+VERSION = 2.22.2
 OS := $(shell uname -s)
 PREFIX ?= /usr/local
 BINDIR = $(PREFIX)/bin

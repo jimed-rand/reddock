@@ -226,7 +226,11 @@ func (g *DockerfileGenerator) Build(targetImage string) error {
 	spinner := ui.NewSpinner(fmt.Sprintf("Building image %s...", targetImage))
 	spinner.Start()
 
-	cmd := g.runtime.Command("build", "-t", targetImage, g.workDir)
+	buildArgs := []string{"build", "-t", targetImage, g.workDir}
+	if g.runtime.Name() == "docker" {
+		buildArgs = []string{"buildx", "build", "-t", targetImage, g.workDir}
+	}
+	cmd := g.runtime.Command(buildArgs...)
 	output, err := cmd.CombinedOutput()
 
 	if err != nil {

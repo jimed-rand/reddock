@@ -2,9 +2,9 @@ package cmd
 
 import "fmt"
 
-var Version = "2.22.4"
+var Version = "2.22.5"
 
 func (c *Command) executeVersion() error {
-	fmt.Printf("Reddock version %s\n", Version)
+	fmt.Printf("Reddock %s\n", Version)
 	return nil
 }

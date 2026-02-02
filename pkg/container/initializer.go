@@ -21,7 +21,6 @@ func NewInitializer(containerName, image string) *Initializer {
 
 	container := cfg.GetContainer(containerName)
 	if container == nil {
-		// Find next available port
 		port := 5555
 		for _, c := range cfg.Containers {
 			if c.Port >= port {
@@ -61,7 +60,6 @@ func (i *Initializer) Initialize() error {
 		return err
 	}
 
-	// Step 1: Check System Requirements
 	s1 := ui.NewSpinner("Checking system requirements...")
 	s1.Start()
 
@@ -70,27 +68,36 @@ func (i *Initializer) Initialize() error {
 	}
 
 	if err := i.checkKernelModules(); err != nil {
-		// checkKernelModules handles its own warnings/errors internally usually, but returns nil
-		// If it actually returns error, we stop.
 		return fmt.Errorf("Kernel module check failed: %v", err)
 	}
 	s1.Finish("System requirements met")
 
-	// Step 2: Pull Image (Native Progress)
-	fmt.Printf("Pulling image %s...\n", i.container.ImageURL)
-	if err := i.pullImage(); err != nil {
-		return fmt.Errorf("Failed to pull image: %v", err)
+	if strings.HasPrefix(i.container.ImageURL, "redroid/redroid:") {
+		fmt.Printf("Pulling official Redroid image %s...\n", i.container.ImageURL)
+		if err := i.pullImage(); err != nil {
+			return fmt.Errorf("Failed to pull image: %v", err)
+		}
+		fmt.Println("Image pulled successfully")
+	} else {
+		s2 := ui.NewSpinner("Verifying custom image availability...")
+		s2.Start()
+		
+		if err := i.verifyImageExists(); err != nil {
+			s2.Finish("Image verification failed")
+			return fmt.Errorf("Image '%s' not found locally. Please build or pull it first.\n"+
+				"For custom images built with 'reddock addons build', the image should already exist.\n"+
+				"Error: %v", i.container.ImageURL, err)
+		}
+		s2.Finish("Custom image verified")
 	}
-	fmt.Println("Image pulled successfully")
 
-	// Step 3: Setup Environment
-	s2 := ui.NewSpinner("Setting up container environment...")
-	s2.Start()
+	s3 := ui.NewSpinner("Setting up container environment...")
+	s3.Start()
 
 	if err := i.createDataDirectory(); err != nil {
 		return fmt.Errorf("Failed to create data directory: %v", err)
 	}
-	s2.Finish("Environment setup complete")
+	s3.Finish("Environment setup complete")
 
 	i.container.Initialized = true
 	i.config.AddContainer(i.container)
@@ -131,12 +138,10 @@ func (i *Initializer) checkKernelModules() error {
 	}
 
 	if binderFound {
-		// Binder found, silent success
 	} else {
-		// Try to load, but don't fail if we can't (might be in container or handled by host)
 		cmd := exec.Command("modprobe", "binder_linux", "devices=binder,hwbinder,vndbinder")
 		if err := cmd.Run(); err != nil {
-			fmt.Println() // Break line from progress bar
+			fmt.Println()
 			fmt.Printf("Warning: modprobe binder_linux failed: %v\n", err)
 			fmt.Println("You need to prepare the binder/binderfs first before using it.")
 		}
@@ -147,6 +152,14 @@ func (i *Initializer) checkKernelModules() error {
 
 func (i *Initializer) pullImage() error {
 	return i.runtime.PullImage(i.container.ImageURL)
+}
+
+func (i *Initializer) verifyImageExists() error {
+	cmd := i.runtime.Command("image", "inspect", i.container.ImageURL)
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("Image does not exist locally")
+	}
+	return nil
 }
 
 func (i *Initializer) createDataDirectory() error {

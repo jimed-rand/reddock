@@ -129,16 +129,20 @@ func (am *AddonManager) BuildCustomImage(baseImage, targetImage, version, arch s
 	fmt.Printf("Target Image: %s\n", targetImage)
 	fmt.Printf("Addons: %v\n\n", addonNames)
 
-	fmt.Printf("Pulling base image %s...\n", baseImage)
-	if err := am.runtime.PullImage(baseImage); err != nil {
-		return fmt.Errorf("Failed to pull base image: %v", err)
+	// Pull base image if it's not a local one
+	if !strings.HasPrefix(baseImage, "reddock-custom:") && !strings.HasPrefix(baseImage, "reddock/") {
+		fmt.Printf("Pulling base image %s...\n", baseImage)
+		if err := am.runtime.PullImage(baseImage); err != nil {
+			return fmt.Errorf("Failed to pull base image: %v", err)
+		}
+		fmt.Println("Base image pulled successfully")
+	} else {
+		fmt.Printf("Base image %s is a custom image, skipping pull...\n", baseImage)
 	}
-	fmt.Println("Base image pulled successfully")
 
 	for _, addonName := range addonNames {
 		if err := am.PrepareAddon(addonName, version, arch); err != nil {
-			fmt.Printf("Warning: Failed to prepare %s: %v\n", addonName, err)
-			fmt.Printf("Continuing without %s...\n", addonName)
+			return fmt.Errorf("Failed to prepare %s: %v", addonName, err)
 		}
 	}
 
@@ -158,7 +162,11 @@ func (am *AddonManager) BuildCustomImage(baseImage, targetImage, version, arch s
 	spinner := ui.NewSpinner("Building Docker image...")
 	spinner.Start()
 
-	cmd := am.runtime.Command("build", "-t", targetImage, am.workDir)
+	buildArgs := []string{"build", "-t", targetImage, am.workDir}
+	if am.runtime.Name() == "docker" {
+		buildArgs = []string{"buildx", "build", "-t", targetImage, am.workDir}
+	}
+	cmd := am.runtime.Command(buildArgs...)
 	output, err := cmd.CombinedOutput()
 
 	if err != nil {

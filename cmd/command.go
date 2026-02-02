@@ -84,20 +84,46 @@ func (c *Command) executeInit() error {
 		}
 	} else {
 		fmt.Println("\nAvailable Redroid Images:")
-		for i, img := range config.AvailableImages {
+		var filteredImages []config.RedroidImage
+		isARM := utils.IsARM()
+
+		for _, img := range config.AvailableImages {
+			isOfficial := strings.HasPrefix(img.URL, "redroid/redroid")
+
+			if isOfficial {
+				// Official images work on both (multi-arch), except 64only which is x86_64 only
+				if isARM && img.Is64Only {
+					continue
+				}
+				filteredImages = append(filteredImages, img)
+				continue
+			}
+
+			// Community images: Hide 64only images on ARM hosts
+			if isARM && img.Is64Only {
+				continue
+			}
+			// Community images: Hide ARM-only images on x86_64 hosts
+			if !isARM && img.IsARMOnly {
+				continue
+			}
+			filteredImages = append(filteredImages, img)
+		}
+
+		for i, img := range filteredImages {
 			fmt.Printf("[%d] %s (%s)\n", i+1, img.Name, img.URL)
 		}
-		fmt.Printf("[%d] Custom Image (Enter your own Docker image)\n", len(config.AvailableImages)+1)
+		fmt.Printf("[%d] Custom Image (Enter your own Docker image)\n", len(filteredImages)+1)
 
-		fmt.Printf("\nSelect an image [1-%d]: ", len(config.AvailableImages)+1)
+		fmt.Printf("\nSelect an image [1-%d]: ", len(filteredImages)+1)
 		var choice int
 		fmt.Scanln(&choice)
 
-		if choice < 1 || choice > len(config.AvailableImages)+1 {
+		if choice < 1 || choice > len(filteredImages)+1 {
 			return fmt.Errorf("Invalid selection!")
 		}
 
-		if choice == len(config.AvailableImages)+1 {
+		if choice == len(filteredImages)+1 {
 			fmt.Print("Enter custom image URL: ")
 			fmt.Scanln(&image)
 			if image == "" {
@@ -105,7 +131,7 @@ func (c *Command) executeInit() error {
 			}
 			offerAddons = false
 		} else {
-			image = config.AvailableImages[choice-1].URL
+			image = filteredImages[choice-1].URL
 			if strings.HasPrefix(image, "redroid/redroid") {
 				offerAddons = true
 			}
@@ -129,18 +155,38 @@ func (c *Command) executeInit() error {
 
 			// 1. Automatic Translation Libraries (Only for x86/x86_64 hosts)
 			hostArch := runtime.GOARCH
-			if hostArch == "amd64" || hostArch == "386" {
-				// Prefer Houdini for better compatibility, fallback to NDK
+			if (hostArch == "amd64" || hostArch == "386") && !config.Is64OnlyImage(image) {
+				vendor := utils.GetCPUVendor()
 				houdini := am.GetAddonNamesByType(addons.AddonTypeHoudini, version)
-				if len(houdini) > 0 {
-					selectedAddons = append(selectedAddons, houdini[0])
-					fmt.Printf("\nSelected ARM translation: %s (Auto-detected)\n", houdini[0])
-				} else {
-					ndk := am.GetAddonNamesByType(addons.AddonTypeNDK, version)
-					if len(ndk) > 0 {
-						selectedAddons = append(selectedAddons, ndk[0])
-						fmt.Printf("\nSelected ARM translation: %s (Auto-detected)\n", ndk[0])
+				ndk := am.GetAddonNamesByType(addons.AddonTypeNDK, version)
+
+				var selected string
+				if vendor == utils.VendorIntel {
+					// Prefer Houdini for Intel
+					if len(houdini) > 0 {
+						selected = houdini[0]
+					} else if len(ndk) > 0 {
+						selected = ndk[0]
 					}
+				} else if vendor == utils.VendorAMD {
+					// Prefer NDK for AMD
+					if len(ndk) > 0 {
+						selected = ndk[0]
+					} else if len(houdini) > 0 {
+						selected = houdini[0]
+					}
+				} else {
+					// Default fallback
+					if len(houdini) > 0 {
+						selected = houdini[0]
+					} else if len(ndk) > 0 {
+						selected = ndk[0]
+					}
+				}
+
+				if selected != "" {
+					selectedAddons = append(selectedAddons, selected)
+					fmt.Printf("\nAuto-detected %s CPU, selected ARM translation: %s\n", strings.ToUpper(string(vendor)), selected)
 				}
 			}
 

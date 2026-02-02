@@ -9,36 +9,39 @@ import (
 )
 
 const (
-	DefaultGPUMode = "guest"
+	DefaultGPUMode = "auto"
 )
 
 type RedroidImage struct {
-	Name string
-	URL  string
+	Name      string
+	URL       string
+	Is64Only  bool
+	IsARMOnly bool
 }
 
 var AvailableImages = []RedroidImage{
-	{"Android 8.1", "redroid/redroid:8.1.0-latest"},
-	{"Android 9", "redroid/redroid:9.0.0-latest"},
-	{"Android 10", "redroid/redroid:10.0.0-latest"},
-	{"Android 11", "redroid/redroid:11.0.0-latest"},
-	{"Android 11 (ARM64 only)", "abing7k/redroid:a11_arm"},
-	{"Android 11 (Magisk - ARM64)", "abing7k/redroid:a11_magisk_arm"},
-	{"Android 11 (GApps - ARM64)", "abing7k/redroid:a11_gapps_arm"},
-	{"Android 11 (GApps & Magisk - ARM64)", "abing7k/redroid:a11_gapps_magisk_arm"},
-	{"Android 11 (LibNDK only - AMD64/x86_64)", "abing7k/redroid:a11_ndk_amd"},
-	{"Android 11 (Magisk & LibNDK - AMD64/x86_64)", "abing7k/redroid:a11_magisk_ndk_amd"},
-	{"Android 11 (GApps & LibNDK - AMD64/x86_64)", "abing7k/redroid:a11_gapps_ndk_amd"},
-	{"Android 11 (GApps & Magisk & LibNDK - AMD64/x86_64)", "abing7k/redroid:a11_gapps_magisk_ndk_amd"},
-	{"Android 11 (GApps & Libhoudini - AMD64/x86_64)", "teddynight/redroid:latest"},
-	{"Android 11 (NDK ChromeOS - AMD64/x86_64)", "erstt/redroid:11.0.0_ndk_ChromeOS"},
-	{"Android 12", "redroid/redroid:12.0.0-latest"},
-	{"Android 12 (x86_64 only)", "redroid/redroid:12.0.0_64only-latest"},
-	{"Android 12 (Fahaddz - GApps & Magisk)", "fahaddz/redroid:13"},
-	{"Android 12 (NDK ChromeOS - AMD64/x86_64)", "erstt/redroid:12.0.0_ndk_ChromeOS"},
-	{"Android 13", "redroid/redroid:13.0.0-latest"},
-	{"Android 13 (x86_64 only)", "redroid/redroid:13.0.0_64only-latest"},
-	{"Android 13 (NDK ChromeOS - AMD64/x86_64)", "erstt/redroid:13.0.0_ndk_ChromeOS"},
+	{"Android 8.1", "redroid/redroid:8.1.0-latest", false, false},
+	{"Android 9", "redroid/redroid:9.0.0-latest", false, false},
+	{"Android 10", "redroid/redroid:10.0.0-latest", false, false},
+	{"Android 11", "redroid/redroid:11.0.0-latest", false, false},
+	{"Android 11 (64bit only)", "redroid/redroid:11.0.0_64only-latest", true, false},
+	{"Android 11 (ARM64 only)", "abing7k/redroid:a11_arm", false, true},
+	{"Android 11 (Magisk - ARM64)", "abing7k/redroid:a11_magisk_arm", false, true},
+	{"Android 11 (GApps - ARM64)", "abing7k/redroid:a11_gapps_arm", false, true},
+	{"Android 11 (GApps & Magisk - ARM64)", "abing7k/redroid:a11_gapps_magisk_arm", false, true},
+	{"Android 11 (LibNDK only - AMD64/x86_64)", "abing7k/redroid:a11_ndk_amd", true, false},
+	{"Android 11 (Magisk & LibNDK - AMD64/x86_64)", "abing7k/redroid:a11_magisk_ndk_amd", true, false},
+	{"Android 11 (GApps & LibNDK - AMD64/x86_64)", "abing7k/redroid:a11_gapps_ndk_amd", true, false},
+	{"Android 11 (GApps & Magisk & LibNDK - AMD64/x86_64)", "abing7k/redroid:a11_gapps_magisk_ndk_amd", true, false},
+	{"Android 11 (GApps & Libhoudini - AMD64/x86_64)", "teddynight/redroid:latest", true, false},
+	{"Android 11 (NDK ChromeOS - AMD64/x86_64)", "erstt/redroid:11.0.0_ndk_ChromeOS", true, false},
+	{"Android 12", "redroid/redroid:12.0.0-latest", false, false},
+	{"Android 12 (64bit only)", "redroid/redroid:12.0.0_64only-latest", true, false},
+	{"Android 12 (Fahaddz - GApps & Magisk)", "fahaddz/redroid:13", false, false},
+	{"Android 12 (NDK ChromeOS - AMD64/x86_64)", "erstt/redroid:12.0.0_ndk_ChromeOS", true, false},
+	{"Android 13", "redroid/redroid:13.0.0-latest", false, false},
+	{"Android 13 (64bit only)", "redroid/redroid:13.0.0_64only-latest", true, false},
+	{"Android 13 (NDK ChromeOS - AMD64/x86_64)", "erstt/redroid:13.0.0_ndk_ChromeOS", true, false},
 }
 
 type Container struct {
@@ -150,6 +153,13 @@ func (cfg *Config) ListContainers() []*Container {
 		containers = append(containers, container)
 	}
 	return containers
+}
+
+func Is64OnlyImage(imageURL string) bool {
+	return strings.Contains(imageURL, "64only") ||
+		strings.Contains(imageURL, "ndk_amd") ||
+		strings.Contains(imageURL, "ndk_ChromeOS") ||
+		strings.EqualFold(imageURL, "teddynight/redroid:latest")
 }
 
 func ExtractVersionFromImage(imageURL string) string {

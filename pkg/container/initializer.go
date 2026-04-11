@@ -71,10 +71,6 @@ func (i *Initializer) Initialize() error {
 	s1 := ui.NewSpinner("Checking system requirements...")
 	s1.Start()
 
-	if err := i.checkRuntime(); err != nil {
-		return fmt.Errorf("Runtime check failed: %v", err)
-	}
-
 	if err := i.checkKernelModules(); err != nil {
 		return fmt.Errorf("Kernel module check failed: %v", err)
 	}
@@ -93,7 +89,6 @@ func (i *Initializer) Initialize() error {
 		if err := i.verifyImageExists(); err != nil {
 			s2.Finish("Image verification failed")
 			return fmt.Errorf("Image '%s' not found locally. Please build or pull it first.\n"+
-				"For custom images built with 'reddock addons build', the image should already exist.\n"+
 				"Error: %v", i.container.ImageURL, err)
 		}
 		s2.Finish("Custom image verified")
@@ -119,13 +114,8 @@ func (i *Initializer) Initialize() error {
 	fmt.Printf("  reddock adb-connect %s  # Get ADB connection info\n", i.container.Name)
 	fmt.Printf("  reddock shell %s        # Access container shell\n", i.container.Name)
 
-	return nil
-}
+	PrintWaydroidDockerNotice()
 
-func (i *Initializer) checkRuntime() error {
-	if !i.runtime.IsInstalled() {
-		return fmt.Errorf("%s is not found. Please install Docker or Podman", i.runtime.Name())
-	}
 	return nil
 }
 

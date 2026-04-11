@@ -1,6 +1,7 @@
 package container
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
 	"strings"
@@ -29,11 +30,23 @@ type GenericRuntime struct {
 }
 
 func NewRuntime() Runtime {
-	// Prefer podman if available, otherwise docker
-	if _, err := exec.LookPath("podman"); err == nil {
-		return &GenericRuntime{binary: "podman"}
-	}
 	return &GenericRuntime{binary: "docker"}
+}
+
+// ValidateDockerEngine ensures the docker CLI is available (reddock uses the docker CLI only).
+func ValidateDockerEngine() error {
+	if _, err := exec.LookPath("docker"); err != nil {
+		return fmt.Errorf("docker was not found in PATH: reddock requires the docker CLI")
+	}
+	return nil
+}
+
+// PrintWaydroidDockerNotice warns that Docker (with the daemon/socket active) can interfere with Waydroid.
+func PrintWaydroidDockerNotice() {
+	fmt.Println()
+	fmt.Println("Compatibility note: With the Docker daemon running and its socket enabled, LXC-related")
+	fmt.Println("workloads such as Waydroid may fail or be blocked. If you rely on Waydroid, you may need")
+	fmt.Println("to stop Docker, not using reddock, or adjust your setup so only one stack owns those resources.")
 }
 
 func (r *GenericRuntime) Name() string {

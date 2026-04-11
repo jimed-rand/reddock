@@ -2,10 +2,8 @@ package cmd
 
 import (
 	"fmt"
-	"runtime"
 	"strings"
 
-	"reddock/pkg/addons"
 	"reddock/pkg/config"
 	"reddock/pkg/container"
 	"reddock/pkg/utils"
@@ -28,6 +26,11 @@ func CheckRoot() error {
 }
 
 func (c *Command) Execute() error {
+	if c.Name != "version" {
+		if err := container.ValidateDockerEngine(); err != nil {
+			return err
+		}
+	}
 	switch c.Name {
 	case "init":
 		return c.executeInit()
@@ -55,8 +58,6 @@ func (c *Command) Execute() error {
 		return c.executeVersion()
 	case "dockerfile":
 		return c.executeDockerfile()
-	case "addons":
-		return c.executeAddons()
 	default:
 		return fmt.Errorf("Unknown command: %s", c.Name)
 	}
@@ -65,7 +66,6 @@ func (c *Command) Execute() error {
 func (c *Command) executeInit() error {
 	var containerName string
 	var image string
-	offerAddons := false
 
 	if len(c.Args) > 0 {
 		containerName = c.Args[0]
@@ -79,9 +79,6 @@ func (c *Command) executeInit() error {
 
 	if len(c.Args) > 1 {
 		image = c.Args[1]
-		if strings.HasPrefix(image, "redroid/redroid") {
-			offerAddons = true
-		}
 	} else {
 		fmt.Println("\nAvailable Redroid Images:")
 		var filteredImages []config.RedroidImage
@@ -129,113 +126,8 @@ func (c *Command) executeInit() error {
 			if image == "" {
 				return fmt.Errorf("Image URL is required!")
 			}
-			offerAddons = false
 		} else {
 			image = filteredImages[choice-1].URL
-			if strings.HasPrefix(image, "redroid/redroid") {
-				offerAddons = true
-			}
-		}
-	}
-
-	if offerAddons {
-		fmt.Print("\nWould you like to create the custom images for more features (GAPPS with any supported ARM translation libraries) ? [y/N]: ")
-		var customImageReq string
-		fmt.Scanln(&customImageReq)
-
-		if strings.ToLower(customImageReq) == "y" || strings.ToLower(customImageReq) == "yes" {
-			version := config.ExtractVersionFromImage(image)
-			if version == "" {
-				fmt.Print("Could not detect Android version automatically. Please enter version (e.g., 11.0.0): ")
-				fmt.Scanln(&version)
-			}
-
-			am := addons.NewAddonManager()
-			var selectedAddons []string
-
-			// 1. Automatic Translation Libraries (Only for x86/x86_64 hosts)
-			hostArch := runtime.GOARCH
-			if (hostArch == "amd64" || hostArch == "386") && !config.Is64OnlyImage(image) {
-				vendor := utils.GetCPUVendor()
-				houdini := am.GetAddonNamesByType(addons.AddonTypeHoudini, version)
-				ndk := am.GetAddonNamesByType(addons.AddonTypeNDK, version)
-
-				var selected string
-				switch vendor {
-				case utils.VendorIntel:
-					// Prefer Houdini for Intel
-					if len(houdini) > 0 {
-						selected = houdini[0]
-					} else if len(ndk) > 0 {
-						selected = ndk[0]
-					}
-				case utils.VendorAMD:
-					// Prefer NDK for AMD
-					if len(ndk) > 0 {
-						selected = ndk[0]
-					} else if len(houdini) > 0 {
-						selected = houdini[0]
-					}
-				default:
-					// Default fallback
-					if len(houdini) > 0 {
-						selected = houdini[0]
-					} else if len(ndk) > 0 {
-						selected = ndk[0]
-					}
-				}
-
-				if selected != "" {
-					selectedAddons = append(selectedAddons, selected)
-					fmt.Printf("\nAuto-detected %s CPU, selected ARM translation: %s\n", strings.ToUpper(string(vendor)), selected)
-				}
-			}
-
-			// 2. GAPPS (User choice)
-			gappsAddons := am.GetAddonNamesByType(addons.AddonTypeGapps, version)
-			if len(gappsAddons) > 0 {
-				fmt.Println("\nAvailable GAPPS:")
-				for i, name := range gappsAddons {
-					fmt.Printf("[%d] %s\n", i+1, name)
-				}
-				fmt.Printf("[%d] None\n", len(gappsAddons)+1)
-				fmt.Printf("Select GAPPS [1-%d]: ", len(gappsAddons)+1)
-
-				var choice int
-				fmt.Scanln(&choice)
-				if choice >= 1 && choice <= len(gappsAddons) {
-					selectedAddons = append(selectedAddons, gappsAddons[choice-1])
-				}
-			}
-
-			if len(selectedAddons) > 0 {
-				arch := "x86_64"
-				if runtime.GOARCH == "arm64" {
-					arch = "arm64"
-				}
-
-				customImageName := config.SuggestCustomImageName(containerName, version)
-				fmt.Println("\nBuilding custom image requires a valid Docker name format:")
-				fmt.Println("Recommended: NAMESPACE/REPOSITORY[:TAG] (e.g., reddock-custom/android:11)")
-				fmt.Println("Note: Avoid HOST[:PORT]/ for local images.")
-				fmt.Printf("Enter target image name [%s]: ", customImageName)
-				var inputName string
-				fmt.Scanln(&inputName)
-				if inputName != "" {
-					customImageName = inputName
-				}
-
-				if err := config.ValidateImageName(customImageName); err != nil {
-					return fmt.Errorf("Invalid image name: %v", err)
-				}
-
-				fmt.Printf("\nBuilding custom image '%s' with selected features...\n", customImageName)
-
-				if err := am.BuildCustomImage(image, customImageName, version, arch, selectedAddons); err != nil {
-					return fmt.Errorf("Failed to build custom image: %v", err)
-				}
-				image = customImageName
-			}
 		}
 	}
 
@@ -386,7 +278,6 @@ func (c *Command) executeDockerfile() error {
 			"  edit <container>              Edit Dockerfile with nano\n" +
 			"  build <container> [image]     Build Docker image from Dockerfile\n" +
 			"  commit <container> <image>    Commit running container to new image\n" +
-			"  install <container> <addon>   Install addon to running container\n" +
 			"  interactive <container>       Interactive Dockerfile workflow")
 	}
 
@@ -436,22 +327,6 @@ func (c *Command) executeDockerfile() error {
 		generator := container.NewDockerfileGenerator(containerName)
 		return generator.CommitContainer(imageName, message)
 
-	case "install":
-		if len(c.Args) < 3 {
-			return fmt.Errorf("Usage: reddock dockerfile install <container-name> <addon-name>\n\n" +
-				"This installs prepared addon files to a RUNNING container.\n" +
-				"First prepare the addon with: reddock addons prepare <addon> <version>")
-		}
-		containerName := c.Args[1]
-		addonName := c.Args[2]
-		generator := container.NewDockerfileGenerator(containerName)
-		// Check if container is running
-		mgr := container.NewManagerForContainer(containerName)
-		if !mgr.IsRunning() {
-			return fmt.Errorf("Container '%s' is not running. Start it first with: sudo reddock start %s", containerName, containerName)
-		}
-		return generator.InstallAddonToRunningContainer("/tmp/reddock-addons", addonName)
-
 	case "interactive", "i":
 		if len(c.Args) < 2 {
 			return fmt.Errorf("Container name is required! Usage: reddock dockerfile interactive <container-name>")
@@ -468,6 +343,8 @@ func (c *Command) executeDockerfile() error {
 
 func PrintUsage() {
 	fmt.Printf("Reddock %s\n", Version)
+	fmt.Println("\nRequires the Docker CLI (docker) on PATH. If you use Waydroid, note that a running Docker")
+	fmt.Println("daemon can block LXC features Waydroid needs; see messages after init.")
 	fmt.Println("\nUsage: reddock [command] [options]")
 	fmt.Println("\nCommands:")
 	fmt.Println("  init [<n>] [<image>]        		Initialize container (interactive if name/image omitted)")
@@ -482,32 +359,20 @@ func PrintUsage() {
 	fmt.Println("  log <n>                     		Show container logs (name required)")
 	fmt.Println("  prune                          	Remove unused images")
 	fmt.Println("  dockerfile <cmd> <n> ...       	Dockerfile management (see below)")
-	fmt.Println("  addons <cmd> ...               	Addon management (see below)")
 	fmt.Println("  version                        	Show version information")
 	fmt.Println("\nDockerfile Subcommands:")
 	fmt.Println("  dockerfile show <n>              	Show generated Dockerfile (name required)")
 	fmt.Println("  dockerfile edit <n>              	Edit Dockerfile with nano (name required)")
 	fmt.Println("  dockerfile build <n> [image]     	Build Docker image from Dockerfile (name required)")
 	fmt.Println("  dockerfile commit <n> <image>    	Commit running container to new image (name and image required)")
-	fmt.Println("  dockerfile install <n> <addon>   	Install addon to running container (name and addon required)")
 	fmt.Println("  dockerfile interactive <n>       	Interactive Dockerfile workflow (name required)")
-	fmt.Println("\nAddons Subcommands:")
-	fmt.Println("  addons list                           	List available addons")
-	fmt.Println("  addons prepare <addon> <v>            	Prepare addon for runtime install")
-	fmt.Println("  addons build <n> <v> <addons...>      	Build custom image with addons")
 	fmt.Println("\nExamples:")
 	fmt.Println("  sudo reddock init android13")
 	fmt.Println("  sudo reddock start android13 -v")
 	fmt.Println("  sudo reddock remove android13")
 	fmt.Println("  sudo reddock remove android13 --image  # Also remove Docker image")
-	fmt.Println("  sudo reddock addons build custom-android13 13.0.0 litegapps ndk")
 	fmt.Println("\nDockerfile subcommand example:")
 	fmt.Println("  sudo reddock dockerfile edit android13           		# Edit with nano/vim")
 	fmt.Println("  sudo reddock dockerfile build android13 myimage  		# Build the image")
-	fmt.Println("  sudo reddock dockerfile install android13 houdini 		# Install to running container")
 	fmt.Println("  sudo reddock dockerfile commit android13 myimage  		# Save the container state")
-	fmt.Println("\nAddon subcommand example:")
-	fmt.Println("  sudo reddock addons list                         		# List available addons")
-	fmt.Println("  sudo reddock addons prepare houdini 11.0.0       		# Prepare addon for runtime")
-	fmt.Println("  sudo reddock addons build custom-img 11.0.0 ndk  		# Build image with addons")
 }

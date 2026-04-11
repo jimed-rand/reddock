@@ -1,6 +1,8 @@
 # Binaries
 redway
 dist/
+.tools/
+.appimagecraft-build-*/
 
 # Go
 *.exe

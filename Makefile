@@ -1,12 +1,32 @@
-.PHONY: help all build static install uninstall clean test fmt vet lint coverage dist check-linux run
+.PHONY: help all build static install uninstall clean test fmt vet lint coverage dist dist-pack appimage check-linux run
 
 # Configuration
 BINARY = reddock
-VERSION = 2.22.5
+APPIMAGECRAFT ?= .tools/appimagecraft-x86_64.AppImage
+# Dynamic version: total commits (like a build number) + ddmmyy. Override: make build VERSION=42-120426
+GIT_COUNT := $(shell git rev-list --count HEAD 2>/dev/null || echo 0)
+BUILD_DATE := $(shell date +%d%m%y)
+VERSION ?= $(GIT_COUNT)-$(BUILD_DATE)
 OS := $(shell uname -s)
 PREFIX ?= /usr/local
-BINDIR = $(PREFIX)/bin
-GO = go
+BINDIR ?= $(PREFIX)/bin
+DESTDIR ?=
+GO ?= go
+
+# Installation path (what install/uninstall use)
+INSTALLED = $(DESTDIR)$(BINDIR)/$(BINARY)
+
+# Verbose builds: by default lists compiled packages (-v). QUIET=1 disables that; VERBOSE=1 or V=1 adds -x.
+V ?= 0
+VERBOSE ?= $(V)
+GO_VERBOSE :=
+ifeq ($(QUIET),1)
+GO_VERBOSE :=
+else ifeq ($(VERBOSE),1)
+GO_VERBOSE += -v -x
+else
+GO_VERBOSE += -v
+endif
 
 # LDFLAGS for size optimization and version injection
 LDFLAGS = -ldflags "-s -w -X reddock/cmd.Version=$(VERSION)"
@@ -24,11 +44,13 @@ help:
 	@echo "Build Targets:"
 	@echo "  make build          - Build the binary (default)"
 	@echo "  make static         - Build a static binary (no CGO)"
-	@echo "  make dist           - Build distribution package"
+	@echo "  make dist           - static + tarball (binary + README + LICENSE)"
+	@echo "  make dist-pack      - tarball only (requires ./$(BINARY) from make static)"
+	@echo "  make appimage       - static + AppImage via appimagecraft (curl, x86_64)"
 	@echo ""
 	@echo "Installation:"
-	@echo "  make install        - Build and install to $(PREFIX)/bin"
-	@echo "  make uninstall      - Remove installed binary"
+	@echo "  make install        - Build and install to $(INSTALLED)"
+	@echo "  make uninstall      - Remove $(INSTALLED)"
 	@echo ""
 	@echo "Development:"
 	@echo "  make run            - Run with original arguments (e.g. make run ARGS='list')"
@@ -42,38 +64,63 @@ help:
 	@echo "  make clean          - Remove build artifacts"
 	@echo ""
 	@echo "Variables:"
-	@echo "  PREFIX              - Installation prefix (default: /usr/local)"
+	@echo "  VERSION             - Embedded version (default: git commit count + ddmmyy)"
+	@echo "  PREFIX              - Installation prefix (default: /usr/local) → bin at PREFIX/bin"
+	@echo "  BINDIR              - Binary directory (default: PREFIX/bin)"
+	@echo "  DESTDIR             - Prepended path for staged installs (e.g. packaging)"
+	@echo "  VERBOSE / V         - Set to 1 for maximum detail (go build -v -x)"
+	@echo "  QUIET               - Set to 1 to silence go build -v (default shows package list)"
 
 all: build
 
 build: check-linux
-	@echo "Building Reddock..."
-	$(GO) build $(LDFLAGS) -o $(BINARY) .
+	@echo "Building Reddock (packages listed below)..."
+	$(GO) build $(GO_VERBOSE) $(LDFLAGS) -o $(BINARY) .
 	@echo "Build complete: ./$(BINARY)"
 
 static: check-linux
 	@echo "Building static binary..."
-	CGO_ENABLED=0 $(GO) build $(LDFLAGS) -o $(BINARY) .
+	CGO_ENABLED=0 $(GO) build $(GO_VERBOSE) $(LDFLAGS) -o $(BINARY) .
 	@echo "Static build complete: ./$(BINARY)"
 
-dist: check-linux build
-	@echo "Creating distribution package..."
+dist: check-linux static
+	@$(MAKE) dist-pack
+
+dist-pack:
+	@test -f $(BINARY) || (echo "Missing ./$(BINARY); run make static first." && exit 1)
 	@mkdir -p dist
-	tar -czf dist/$(BINARY)-linux-amd64.tar.gz $(BINARY) README.md LICENSE
-	@echo "Distribution package: dist/$(BINARY)-linux-amd64.tar.gz"
+	tar -czf dist/$(BINARY)-$(VERSION)-linux-amd64.tar.gz $(BINARY) README.md LICENSE
+	@echo "Tarball: dist/$(BINARY)-$(VERSION)-linux-amd64.tar.gz"
+
+appimage: check-linux static
+	@mkdir -p .tools dist
+	@test -x $(APPIMAGECRAFT) || (curl -fsSL -o $(APPIMAGECRAFT) https://github.com/TheAssassin/appimagecraft/releases/download/continuous/appimagecraft-x86_64.AppImage && chmod +x $(APPIMAGECRAFT))
+	@APPIMAGE_EXTRACT_AND_RUN=1 $(APPIMAGECRAFT) build
+	@mv -f reddock-x86_64.AppImage dist/$(BINARY)-$(VERSION)-x86_64.AppImage
+	@echo "AppImage: dist/$(BINARY)-$(VERSION)-x86_64.AppImage"
 
 run: build
 	./$(BINARY) $(ARGS)
 
 install: check-linux build
-	@echo "Installing Reddock to $(DESTDIR)$(BINDIR)..."
-	install -Dm755 $(BINARY) $(DESTDIR)$(BINDIR)/$(BINARY)
-	@echo "Installation complete!"
+	@echo "Installing $(BINARY) → $(INSTALLED)"
+	install -Dm755 $(BINARY) $(INSTALLED)
+	@test -x "$(INSTALLED)" || { echo "Error: install did not produce an executable at $(INSTALLED)"; exit 1; }
+	@ls -l "$(INSTALLED)"
+	@echo "Installed and verified at $(INSTALLED)"
 
 uninstall:
-	@echo "Uninstalling Reddock from $(DESTDIR)$(BINDIR)..."
-	rm -f $(DESTDIR)$(BINDIR)/$(BINARY)
-	@echo "Uninstall complete"
+	@if [ ! -e "$(INSTALLED)" ]; then \
+		echo "Nothing to remove: $(INSTALLED) is not present"; \
+		exit 0; \
+	fi
+	@echo "Removing $(INSTALLED)"
+	rm -f "$(INSTALLED)"
+	@if [ -e "$(INSTALLED)" ]; then \
+		echo "Error: could not remove $(INSTALLED)"; \
+		exit 1; \
+	fi
+	@echo "Uninstall complete ($(INSTALLED) removed)"
 
 fmt:
 	@echo "Formatting code..."
@@ -101,6 +148,8 @@ coverage:
 clean:
 	@echo "Cleaning artifacts..."
 	rm -f $(BINARY)
-	rm -rf dist/
+	rm -rf dist/ .tools/
+	rm -f reddock-x86_64.AppImage
+	rm -rf .appimagecraft-build-*
 	rm -f coverage.out coverage.html
 	@echo "Done"

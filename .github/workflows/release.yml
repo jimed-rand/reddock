@@ -1,0 +1,77 @@
+# Build Linux amd64 binaries and attach them to GitHub Releases (tag push) or as workflow artifacts.
+name: Release Workflow for Reddock
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  APPIMAGE_EXTRACT_AND_RUN: "1"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.21"
+
+      - name: Compute version
+        id: ver
+        run: |
+          VERSION="$(git rev-list --count HEAD)-$(date +%d%m%y)"
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Test
+        run: go test ./...
+
+      - name: Static binary and tarball
+        run: |
+          make static VERSION="$VERSION"
+          make dist-pack VERSION="$VERSION"
+
+      - name: Standalone executable (chmod +x)
+        run: |
+          mkdir -p dist
+          cp -f reddock dist/reddock
+          chmod +x dist/reddock
+
+      - name: Install appimagecraft and build AppImage
+        run: |
+          curl -fsSL -o appimagecraft-x86_64.AppImage \
+            https://github.com/TheAssassin/appimagecraft/releases/download/continuous/appimagecraft-x86_64.AppImage
+          chmod +x appimagecraft-x86_64.AppImage
+          ./appimagecraft-x86_64.AppImage build
+          mv -f reddock-x86_64.AppImage "dist/reddock-${VERSION}-x86_64.AppImage"
+
+      - name: Upload workflow artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: reddock-${{ env.VERSION }}
+          path: |
+            dist/reddock-${{ env.VERSION }}-linux-amd64.tar.gz
+            dist/reddock-${{ env.VERSION }}-x86_64.AppImage
+            dist/reddock
+
+      - name: Create GitHub Release
+        if: github.ref_type == 'tag'
+        uses: softprops/action-gh-release@v2
+        with:
+          name: ${{ github.ref_name }} (${{ steps.ver.outputs.version }})
+          files: |
+            dist/reddock-${{ env.VERSION }}-linux-amd64.tar.gz
+            dist/reddock-${{ env.VERSION }}-x86_64.AppImage
+            dist/reddock
+          generate_release_notes: true

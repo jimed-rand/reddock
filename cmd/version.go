@@ -2,7 +2,8 @@ package cmd
 
 import "fmt"
 
-var Version = "2.22.5"
+// Injected at link time via -ldflags "-X reddock/cmd.Version=..." (see Makefile).
+var Version = "dev"
 
 func (c *Command) executeVersion() error {
 	fmt.Printf("Reddock %s\n", Version)

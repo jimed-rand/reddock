@@ -94,6 +94,8 @@ dist-pack:
 
 appimage: check-linux static
 	@mkdir -p .tools dist
+	@chmod +x packaging/write-appimagecraft-yml.sh
+	@./packaging/write-appimagecraft-yml.sh
 	@test -x $(APPIMAGECRAFT) || (curl -fsSL -o $(APPIMAGECRAFT) https://github.com/TheAssassin/appimagecraft/releases/download/continuous/appimagecraft-x86_64.AppImage && chmod +x $(APPIMAGECRAFT))
 	@APPIMAGE_EXTRACT_AND_RUN=1 $(APPIMAGECRAFT) build
 	@mv -f reddock-x86_64.AppImage dist/$(BINARY)-$(VERSION)-x86_64.AppImage
@@ -149,7 +151,7 @@ clean:
 	@echo "Cleaning artifacts..."
 	rm -f $(BINARY)
 	rm -rf dist/ .tools/
-	rm -f reddock-x86_64.AppImage
+	rm -f reddock-x86_64.AppImage appimagecraft.yml
 	rm -rf .appimagecraft-build-*
 	rm -f coverage.out coverage.html
 	@echo "Done"

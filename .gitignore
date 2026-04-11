@@ -3,6 +3,7 @@ redway
 dist/
 .tools/
 .appimagecraft-build-*/
+/appimagecraft.yml
 
 # Go
 *.exe

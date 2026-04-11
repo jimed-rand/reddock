@@ -50,6 +50,8 @@ jobs:
 
       - name: Install appimagecraft and build AppImage
         run: |
+          chmod +x packaging/write-appimagecraft-yml.sh
+          ./packaging/write-appimagecraft-yml.sh
           curl -fsSL -o appimagecraft-x86_64.AppImage \
             https://github.com/TheAssassin/appimagecraft/releases/download/continuous/appimagecraft-x86_64.AppImage
           chmod +x appimagecraft-x86_64.AppImage

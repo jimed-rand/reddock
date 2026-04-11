@@ -29,8 +29,8 @@ func (a *AdbManager) ShowConnection() error {
 
 	container := a.manager.GetContainer()
 	port := 5555
-	if container != nil && container.Port != 0 {
-		port = container.Port
+	if container != nil {
+		port = container.HostADBPort()
 	}
 
 	ip, _ := a.manager.GetIP()
@@ -52,7 +52,7 @@ func (a *AdbManager) ShowConnection() error {
 	fmt.Printf("  adb shell              # Access Android shell\n")
 	fmt.Printf("  adb install app.apk    # Install APK\n")
 	fmt.Printf("  adb logcat             # View logs\n")
-	fmt.Printf("  scrcpy -s localhost:5555 # Run scrcpy\n")
+	fmt.Printf("  scrcpy -s localhost:%d # Run scrcpy\n", port)
 
 	return nil
 }

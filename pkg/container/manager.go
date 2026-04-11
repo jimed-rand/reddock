@@ -71,7 +71,7 @@ func (m *Manager) Start(verbose bool) error {
 	spinner.Finish(fmt.Sprintf("Container '%s' started successfully", m.containerName))
 
 	fmt.Println("\nContainer started!")
-	fmt.Println("ADB Connect: adb connect localhost:5555")
+	fmt.Printf("ADB Connect: adb connect localhost:%d\n", container.HostADBPort())
 
 	if verbose {
 		fmt.Println("\nShowing container logs (Ctrl+C to detach)...")

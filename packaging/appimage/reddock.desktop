@@ -1,0 +1,8 @@
+[Desktop Entry]
+Name=Reddock
+Comment=Manage Redroid containers with Docker to Run Android on Linux
+Exec=reddock
+Icon=application-x-executable
+Type=Application
+Categories=Utility;
+Terminal=true

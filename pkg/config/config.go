@@ -129,6 +129,14 @@ func (c *Container) GetDataPath() string {
 	return GetDefaultDataPath(c.Name)
 }
 
+// HostADBPort is the host-side TCP port published for ADB (maps to container 5555).
+func (c *Container) HostADBPort() int {
+	if c == nil || c.Port == 0 {
+		return 5555
+	}
+	return c.Port
+}
+
 func (cfg *Config) GetContainer(name string) *Container {
 	if container, exists := cfg.Containers[name]; exists {
 		return container

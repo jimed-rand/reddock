@@ -56,6 +56,10 @@ type Container struct {
 
 type Config struct {
 	Containers map[string]*Container `json:"containers"`
+	// RedroidScriptPath is optional: root directory of a local ayasa520/redroid-script clone (guest dependency; not bundled with reddock).
+	RedroidScriptPath string `json:"redroid_script_path,omitempty"`
+	// RedroidScriptInstant when true and RedroidScriptPath is unset: use reddock-managed cache clone (same as --instant).
+	RedroidScriptInstant bool `json:"redroid_script_instant,omitempty"`
 }
 
 func GetConfigDir() string {

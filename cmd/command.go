@@ -278,7 +278,8 @@ func (c *Command) executeDockerfile() error {
 			"  edit <container>              Edit Dockerfile with nano\n" +
 			"  build <container> [image]     Build Docker image from Dockerfile\n" +
 			"  commit <container> <image>    Commit running container to new image\n" +
-			"  interactive <container>       Interactive Dockerfile workflow")
+			"  interactive <container>       Interactive Dockerfile workflow\n" +
+			"  addons <container> [flags]    redroid-script + GPU layer (guest path or --instant cache; see addons usage)")
 	}
 
 	subcommand := c.Args[0]
@@ -334,6 +335,37 @@ func (c *Command) executeDockerfile() error {
 		generator := container.NewDockerfileGenerator(c.Args[1])
 		return generator.Interactive()
 
+	case "addons", "redroid-script":
+		if len(c.Args) < 2 {
+			return fmt.Errorf("Usage: reddock dockerfile addons <container> [flags]\n\n" +
+				"Runs ayasa520/redroid-script then adds the same GPU CMD as `reddock dockerfile build`.\n\n" +
+				"Script source (first match wins): --script-path, REDDOCK_REDROID_SCRIPT, redroid_script_path in config.\n" +
+				"If none of those are set, use --instant (or REDDOCK_REDROID_SCRIPT_INSTANT=1 or redroid_script_instant\n" +
+				"in config) so reddock clones upstream into its cache (~/.config/reddock/cache/redroid-script).\n" +
+				"Android version defaults from the container image when it is official (redroid/redroid:…).\n\n" +
+				"Flags (same meaning as redroid.py):\n" +
+				"  -a, --android VERSION   Android line (8.1.0 … 14.0.0, 12.0.0_64only); default from image\n" +
+				"  -g, --gapps             OpenGapps\n" +
+				"  -lg, --litegapps       LiteGapps\n" +
+				"  -mtg, --mindthegapps   MindTheGapps\n" +
+				"  -n, --ndk              libndk translation\n" +
+				"  -i, --houdini          Houdini\n" +
+				"  -m, --magisk           Magisk\n" +
+				"  -w, --widevine         Widevine L3\n" +
+				"  -t, --target-image     Final image name (default: reddock-custom:<name>-redroid-script)\n" +
+				"  --script-path DIR      Root of your redroid-script clone (guest / reproducible tree)\n" +
+				"  --instant              Use reddock’s cached git clone when no guest path is configured\n" +
+				"  --update-config        Set container image_url to the final image in config.json\n\n" +
+				"Examples:\n" +
+				"  sudo reddock dockerfile addons mybox --script-path ~/src/redroid-script -g -n -t reddock/mybox:full\n" +
+				"  sudo reddock dockerfile addons mybox --instant -g -n -t reddock/mybox:full")
+		}
+		name, flags, err := container.ParseRedroidScriptCLIArgs(c.Args[1:])
+		if err != nil {
+			return err
+		}
+		return container.BuildImageWithRedroidScript(name, flags)
+
 	default:
 		// Backward compatibility: treat first arg as container name for "show"
 		generator := container.NewDockerfileGenerator(subcommand)
@@ -366,6 +398,7 @@ func PrintUsage() {
 	fmt.Println("  dockerfile build <n> [image]     	Build Docker image from Dockerfile (name required)")
 	fmt.Println("  dockerfile commit <n> <image>    	Commit running container to new image (name and image required)")
 	fmt.Println("  dockerfile interactive <n>       	Interactive Dockerfile workflow (name required)")
+	fmt.Println("  dockerfile addons <n> [flags]    	redroid-script + GPU layer (--script-path or --instant)")
 	fmt.Println("\nExamples:")
 	fmt.Println("  sudo reddock init android13")
 	fmt.Println("  sudo reddock start android13 -v")
@@ -375,4 +408,5 @@ func PrintUsage() {
 	fmt.Println("  sudo reddock dockerfile edit android13           		# Edit with nano/vim")
 	fmt.Println("  sudo reddock dockerfile build android13 myimage  		# Build the image")
 	fmt.Println("  sudo reddock dockerfile commit android13 myimage  		# Save the container state")
+	fmt.Println("  sudo reddock dockerfile addons android13 --instant -g -n -t my/gapps-ndk")
 }

@@ -39,3 +39,6 @@ Thumbs.db
 # Data directories
 data-redroid/
 reddock
+
+# Local guest clone (ayasa520/redroid-script); not part of reddock sources
+redroid-script/

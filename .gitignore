@@ -2,6 +2,8 @@
 redway
 dist/
 .tools/
+# Legacy AppImage (no longer built; ignore if present locally)
+/appimagecraft.yml
 
 # Go
 *.exe

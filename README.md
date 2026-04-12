@@ -6,7 +6,7 @@
 
 - **Docker-first** — Uses the Docker API for container lifecycle and volumes.
 - **Simple commands** — `init`, `start`, `stop`, `restart`, `status`, `shell`, `list`, `remove`, and more.
-- **Kernel modules** — Checks and tries to load `binder_linux` when needed.
+- **Kernel modules** — Detects `binder_linux` (loaded, sysfs, `modinfo`, or `.ko` under `/lib/modules/...` for DKMS/KMP), the distinct `binder` module when present, legacy `/dev/binder*`, binderfs layout `/dev/binderfs/*`, and `/proc/filesystems` binderfs support; then best-effort `modprobe binder_linux` when appropriate.
 - **ADB** — Helpers to connect to the emulated device over the published port.
 - **GPU modes** — Configure rendering (`host`, `guest`, `auto`) when supported by your setup.
 - **Persistent data** — Android user data can live in Docker volumes across restarts.
@@ -124,6 +124,7 @@ Use `reddock --help` for the full flag list.
 
 ## Troubleshooting
 
+- **Binder / binderfs** — `reddock status` shows host binder detection. Nodes may be `/dev/binder` (legacy) or `/dev/binderfs/binder` (binderfs). A packaged `binder_linux` (DKMS/KMP) is detected even before load via `modinfo` or a matching `.ko` under `/lib/modules/$(uname -r)/`.
 - **Container not running** — Commands like `adb-connect` need a started container (`reddock start …`).
 - **Docker permission denied** — Use `sudo` or add your user to the `docker` group and re-login.
 - **Wrong architecture** — Prebuilt release binaries are **linux/amd64** only.

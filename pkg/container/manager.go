@@ -43,6 +43,15 @@ func (m *Manager) Start(verbose bool) error {
 		return fmt.Errorf("Container '%s' is not initialized. Run 'reddock init %s' first", m.containerName, m.containerName)
 	}
 
+	// #region agent log
+	agentDebugLog("manager.go:Start", "container config loaded", "H5", map[string]any{
+		"containerName": m.containerName,
+		"port":          container.Port,
+		"imageURL":      container.ImageURL,
+		"dataPath":      container.GetDataPath(),
+	})
+	// #endregion
+
 	if m.runtime.IsRunning(m.containerName) {
 		fmt.Printf("Container '%s' is already running\n", m.containerName)
 		return nil
@@ -51,8 +60,22 @@ func (m *Manager) Start(verbose bool) error {
 	spinner := ui.NewSpinner(fmt.Sprintf("Starting container '%s'...", m.containerName))
 	spinner.Start()
 
+	// #region agent log
+	versOut, versErr := m.runtime.Command("version", "--format", "{{.Client.Version}}").CombinedOutput()
+	// #endregion
+
+	exists := m.runtime.Exists(m.containerName)
+	// #region agent log
+	agentDebugLog("manager.go:Start", "docker probe + exists", "H3", map[string]any{
+		"runtimeBinary": m.runtime.Name(),
+		"versionErr":    fmt.Sprintf("%v", versErr),
+		"versionOut":    strings.TrimSpace(string(versOut)),
+		"exists":        exists,
+	})
+	// #endregion
+
 	var err error
-	if m.runtime.Exists(m.containerName) {
+	if exists {
 		err = m.runtime.StartExisting(m.containerName)
 		if err != nil {
 			spinner.Finish(fmt.Sprintf("Failed to start container '%s'", m.containerName))
@@ -60,12 +83,45 @@ func (m *Manager) Start(verbose bool) error {
 		}
 	} else {
 		args := m.buildRunArgs(container)
+		// #region agent log
+		agentDebugLog("manager.go:Start", "docker run args", "H4", map[string]any{"args": args})
+		// #endregion
 		cmd := m.runtime.Command(args...)
 		output, runErr := cmd.CombinedOutput()
 		if runErr != nil {
 			spinner.Finish(fmt.Sprintf("Failed to start container '%s'", m.containerName))
 			return fmt.Errorf("Failed to start container: %s\n%s", runErr, string(output))
 		}
+	}
+
+	// #region agent log
+	st, stErr := m.runtime.Inspect(m.containerName, "{{.State.Status}}")
+	exitStr, _ := m.runtime.Inspect(m.containerName, "{{.State.ExitCode}}")
+	runRaw, runErr := m.runtime.Inspect(m.containerName, "{{.State.Running}}")
+	runningNow := m.runtime.IsRunning(m.containerName)
+	agentDebugLog("manager.go:Start", "post-start state", "H1", map[string]any{
+		"usedStartExisting":       exists,
+		"IsRunning":               runningNow,
+		"StateStatus":             st,
+		"StateRunningTemplateOut": strings.TrimSpace(runRaw),
+		"inspectStatusErr":        fmt.Sprintf("%v", stErr),
+		"inspectRunningErr":       fmt.Sprintf("%v", runErr),
+		"ExitCodeStr":             exitStr,
+	})
+	// #endregion
+
+	if !runningNow {
+		logOut, logErr := m.runtime.Command("logs", "--tail", "60", m.containerName).CombinedOutput()
+		spinner.Finish(fmt.Sprintf("Container '%s' did not stay running", m.containerName))
+		logBlock := string(logOut)
+		if logErr != nil {
+			logBlock = fmt.Sprintf("(docker logs failed: %v)\n%s", logErr, logBlock)
+		}
+		return fmt.Errorf(
+			"container is not running (docker state: %q, exit code: %s). "+
+				"Check binder (binder_linux /dev/binder* or binderfs /dev/binderfs/*), ashmem/memfd, and image compatibility; see redroid-doc troubleshooting.\n\nLast container logs:\n%s",
+			strings.TrimSpace(st), strings.TrimSpace(exitStr), strings.TrimSpace(logBlock),
+		)
 	}
 
 	spinner.Finish(fmt.Sprintf("Container '%s' started successfully", m.containerName))
@@ -101,8 +157,9 @@ func (m *Manager) buildRunArgs(container *config.Container) []string {
 	// Image
 	args = append(args, container.ImageURL)
 
-	// Boot arguments
+	// Boot arguments (use_memfd helps on kernels without ashmem, e.g. many openSUSE/5.18+ setups)
 	args = append(args, fmt.Sprintf("androidboot.redroid_gpu_mode=%s", gpuMode))
+	args = append(args, "androidboot.use_memfd=true")
 
 	return args
 }
@@ -165,6 +222,26 @@ func (m *Manager) GetContainer() *config.Container {
 		return nil
 	}
 	return m.config.GetContainer(m.containerName)
+}
+
+// FormatStoppedDiagnostics returns docker state and recent logs when the instance is not running.
+func (m *Manager) FormatStoppedDiagnostics() string {
+	if !m.runtime.Exists(m.containerName) {
+		return "No Docker container with this name exists. If you removed it manually, run `reddock remove " + m.containerName + "` and `reddock init` again, or check `docker ps -a`."
+	}
+	st, errSt := m.runtime.Inspect(m.containerName, "{{.State.Status}}")
+	exit, _ := m.runtime.Inspect(m.containerName, "{{.State.ExitCode}}")
+	logs, logErr := m.runtime.Command("logs", "--tail", "45", m.containerName).CombinedOutput()
+	var b strings.Builder
+	fmt.Fprintf(&b, "Docker state: status=%q exit_code=%q (inspect err: %v)\n",
+		strings.TrimSpace(st), strings.TrimSpace(exit), errSt)
+	if logErr != nil {
+		fmt.Fprintf(&b, "docker logs error: %v\n", logErr)
+	}
+	b.WriteString(strings.TrimSpace(string(logs)))
+	fmt.Fprintf(&b, "\n\nTip: If you upgraded reddock, run `sudo reddock stop %s` then `sudo reddock start %s` once to recreate the Docker container with current boot flags; your host data directory is kept.\n",
+		m.containerName, m.containerName)
+	return b.String()
 }
 
 func (m *Manager) showLogs() error {

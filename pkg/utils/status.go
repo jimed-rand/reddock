@@ -5,6 +5,7 @@ import (
 
 	"reddock/pkg/config"
 	"reddock/pkg/container"
+	"reddock/pkg/sysinfo"
 )
 
 type StatusManager struct {
@@ -40,6 +41,17 @@ func (s *StatusManager) Show() error {
 	fmt.Printf("Data Path: %s\n", cont.GetDataPath())
 	fmt.Printf("GPU Mode: %s\n", cont.GPUMode)
 	fmt.Printf("Initiated: %v\n", cont.Initialized)
+
+	b := sysinfo.ProbeBinderHost()
+	fmt.Print("\nHost binder (kernel): ")
+	switch {
+	case b.HostBinderUsable():
+		fmt.Println("OK — binder module and/or device nodes detected.")
+	case b.BinderLinuxInstallable():
+		fmt.Println("binder_linux is packaged for this kernel but not active; load the module or finish binderfs device setup.")
+	default:
+		fmt.Println("not detected — install binder_linux (DKMS/KMP) or configure binderfs for this kernel.")
+	}
 
 	if !cont.Initialized {
 		fmt.Printf("\nThe container is not initiated. Run 'reddock init %s' first.\n", cont.Name)

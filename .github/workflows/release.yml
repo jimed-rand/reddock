@@ -1,4 +1,6 @@
-# Build Linux amd64 binaries and attach them to GitHub Releases (tag push) or as workflow artifacts.
+# Build Linux amd64, publish .tar.xz + bare binary to GitHub Releases.
+# - Push tag v*: create/update release for that tag.
+# - workflow_dispatch: create git tag + release at current commit (input tag name).
 name: Release Workflow for Reddock
 
 on:
@@ -6,9 +8,18 @@ on:
     tags:
       - "v*"
   workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to create and release (e.g. v1.2.0)"
+        required: true
+        type: string
 
 permissions:
   contents: write
+
+concurrency:
+  group: release-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   build:
@@ -27,7 +38,13 @@ jobs:
       - name: Compute version
         id: ver
         run: |
-          VERSION="$(git rev-list --count HEAD)-$(date +%d%m%y)"
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION="${{ inputs.tag }}"
+          elif [ "${{ github.ref_type }}" = "tag" ]; then
+            VERSION="${GITHUB_REF_NAME}"
+          else
+            VERSION="$(git rev-list --count HEAD)-$(date +%d%m%y)"
+          fi
           echo "VERSION=$VERSION" >> "$GITHUB_ENV"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
@@ -39,7 +56,7 @@ jobs:
           make static VERSION="$VERSION"
           make dist-pack VERSION="$VERSION"
 
-      - name: Standalone executable (chmod +x)
+      - name: Stage standalone binary for upload
         run: |
           mkdir -p dist
           cp -f reddock dist/reddock
@@ -50,15 +67,25 @@ jobs:
         with:
           name: reddock-${{ env.VERSION }}
           path: |
-            dist/reddock-${{ env.VERSION }}-linux-amd64.tar.gz
+            dist/reddock-${{ env.VERSION }}-linux-amd64.tar.xz
             dist/reddock
 
-      - name: Create GitHub Release
-        if: github.ref_type == 'tag'
-        uses: softprops/action-gh-release@v2
-        with:
-          name: ${{ github.ref_name }} (${{ steps.ver.outputs.version }})
-          files: |
-            dist/reddock-${{ env.VERSION }}-linux-amd64.tar.gz
-            dist/reddock
-          generate_release_notes: true
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          TAG="${VERSION}"
+          TAR="dist/reddock-${VERSION}-linux-amd64.tar.xz"
+          BIN="dist/reddock"
+          test -f "$TAR"
+          test -f "$BIN"
+
+          # Idempotent: existing release → replace assets; else create tag (if missing) + release.
+          if gh release view "${TAG}" >/dev/null 2>&1; then
+            gh release upload "${TAG}" "$TAR" "$BIN" --clobber
+          else
+            gh release create "${TAG}" "$TAR" "$BIN" \
+              --title "Reddock ${TAG}" \
+              --generate-notes
+          fi

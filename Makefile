@@ -43,8 +43,8 @@ help:
 	@echo "Build Targets:"
 	@echo "  make build          - Build the binary (default)"
 	@echo "  make static         - Build a static binary (no CGO)"
-	@echo "  make dist           - static + tarball (binary + README + LICENSE)"
-	@echo "  make dist-pack      - tarball only (requires ./$(BINARY) from make static)"
+	@echo "  make dist           - static + .tar.xz (binary + README + LICENSE)"
+	@echo "  make dist-pack      - .tar.xz only (requires ./$(BINARY) from make static)"
 	@echo ""
 	@echo "Installation:"
 	@echo "  make install        - Build and install to $(INSTALLED)"
@@ -87,8 +87,8 @@ dist: check-linux static
 dist-pack:
 	@test -f $(BINARY) || (echo "Missing ./$(BINARY); run make static first." && exit 1)
 	@mkdir -p dist
-	tar -czf dist/$(BINARY)-$(VERSION)-linux-amd64.tar.gz $(BINARY) README.md LICENSE
-	@echo "Tarball: dist/$(BINARY)-$(VERSION)-linux-amd64.tar.gz"
+	tar -cJf dist/$(BINARY)-$(VERSION)-linux-amd64.tar.xz $(BINARY) README.md LICENSE
+	@echo "Tarball: dist/$(BINARY)-$(VERSION)-linux-amd64.tar.xz"
 
 run: build
 	./$(BINARY) $(ARGS)

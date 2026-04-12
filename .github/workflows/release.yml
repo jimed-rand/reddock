@@ -1,6 +1,6 @@
 # Build Linux amd64, publish .tar.xz + bare binary to GitHub Releases.
-# - Push tag v*: create/update release for that tag.
-# - workflow_dispatch: create git tag + release at current commit (input tag name).
+# - Push tag v*: release for that tag (binary VERSION = tag name).
+# - workflow_dispatch: you set the Git tag name (same as on GitHub); tag + release are created at HEAD.
 name: Release Workflow for Reddock
 
 on:
@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Tag to create and release (e.g. v1.2.0)"
+        description: "Git tag to create and release (must match repo convention), e.g. v0.2.0"
         required: true
         type: string
 
@@ -38,8 +38,20 @@ jobs:
       - name: Compute version
         id: ver
         run: |
+          set -euo pipefail
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            VERSION="${{ inputs.tag }}"
+            TAG="${{ inputs.tag }}"
+            TAG="$(echo "$TAG" | tr -d ' \n\r\t')"
+            RAW="${TAG#v}"
+            if [ -z "$RAW" ] || [ "$RAW" = "$TAG" ]; then
+              echo "Tag must use a leading v (e.g. v0.2.0), got: ${{ inputs.tag }}" >&2
+              exit 1
+            fi
+            if ! echo "$RAW" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+([.-][a-zA-Z0-9.-]+)?$'; then
+              echo "Invalid tag: '$TAG' (expected vMAJOR.MINOR.PATCH, e.g. v0.2.0 or v1.0.0-beta.1)" >&2
+              exit 1
+            fi
+            VERSION="${TAG}"
           elif [ "${{ github.ref_type }}" = "tag" ]; then
             VERSION="${GITHUB_REF_NAME}"
           else
@@ -76,12 +88,11 @@ jobs:
         run: |
           set -euo pipefail
           TAG="${VERSION}"
-          TAR="dist/reddock-${VERSION}-linux-amd64.tar.xz"
+          TAR="dist/reddock-${TAG}-linux-amd64.tar.xz"
           BIN="dist/reddock"
           test -f "$TAR"
           test -f "$BIN"
 
-          # Idempotent: existing release → replace assets; else create tag (if missing) + release.
           if gh release view "${TAG}" >/dev/null 2>&1; then
             gh release upload "${TAG}" "$TAR" "$BIN" --clobber
           else

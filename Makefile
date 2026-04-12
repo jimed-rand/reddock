@@ -2,10 +2,12 @@
 
 # Configuration
 BINARY = reddock
-# Dynamic version: total commits (like a build number) + ddmmyy. Override: make build VERSION=42-120426
+# Version: override with make VERSION=…
+# Default: git describe from annotated/lightweight tags (matches GitHub tags after push); else <commit-count>-<ddmmyy>
 GIT_COUNT := $(shell git rev-list --count HEAD 2>/dev/null || echo 0)
 BUILD_DATE := $(shell date +%d%m%y)
-VERSION ?= $(GIT_COUNT)-$(BUILD_DATE)
+GIT_DESC := $(shell git describe --tags --always --dirty 2>/dev/null)
+VERSION ?= $(if $(GIT_DESC),$(GIT_DESC),$(GIT_COUNT)-$(BUILD_DATE))
 OS := $(shell uname -s)
 PREFIX ?= /usr/local
 BINDIR ?= $(PREFIX)/bin
@@ -62,7 +64,7 @@ help:
 	@echo "  make clean          - Remove build artifacts"
 	@echo ""
 	@echo "Variables:"
-	@echo "  VERSION             - Embedded version (default: git commit count + ddmmyy)"
+	@echo "  VERSION             - Embedded version (git describe from tags, else count+date)"
 	@echo "  PREFIX              - Installation prefix (default: /usr/local) → bin at PREFIX/bin"
 	@echo "  BINDIR              - Binary directory (default: PREFIX/bin)"
 	@echo "  DESTDIR             - Prepended path for staged installs (e.g. packaging)"

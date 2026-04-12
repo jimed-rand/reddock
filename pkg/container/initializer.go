@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"reddock/pkg/config"
+	"reddock/pkg/sysinfo"
 	"reddock/pkg/ui"
 )
 
@@ -120,32 +121,45 @@ func (i *Initializer) Initialize() error {
 }
 
 func (i *Initializer) checkKernelModules() error {
-	binderFound := false
-	binderPaths := []string{
-		"/sys/module/binder_linux",
-		"/sys/module/binder",
-		"/dev/binderfs",
-		"/dev/binder",
+	probe := sysinfo.ProbeBinderHost()
+
+	if probe.HostBinderUsable() {
+		tryModprobeAshmem()
+		return nil
 	}
 
-	for _, path := range binderPaths {
-		if _, err := os.Stat(path); err == nil {
-			binderFound = true
-			break
-		}
-	}
-
-	if binderFound {
-	} else {
+	// binder_linux may be packaged (DKMS, openSUSE KMP, extra/) for this kernel but not loaded yet;
+	// binderfs setups expose nodes under /dev/binderfs/* instead of /dev/binder.
+	if probe.BinderLinuxInstallable() {
 		cmd := exec.Command("modprobe", "binder_linux", "devices=binder,hwbinder,vndbinder")
 		if err := cmd.Run(); err != nil {
 			fmt.Println()
 			fmt.Printf("Warning: modprobe binder_linux failed: %v\n", err)
-			fmt.Println("You need to prepare the binder/binderfs first before using it.")
+			fmt.Println("Prepare binder: legacy /dev/binder* or mount binderfs and create /dev/binderfs/{binder,hwbinder,vndbinder}.")
+			fmt.Println(probe.Summary())
+		} else {
+			after := sysinfo.ProbeBinderHost()
+			if !after.HostBinderUsable() {
+				fmt.Println()
+				fmt.Println("Warning: binder_linux modprobe ran but usable binder nodes are still not visible.")
+				fmt.Println(after.Summary())
+			}
 		}
+	} else {
+		fmt.Println()
+		fmt.Println("Warning: No binder_linux module for this kernel (modinfo / module tree) and no binder devices found.")
+		fmt.Println("Install binder support (e.g. waydroid/dkms binder_linux, distro KMP) or enable binderfs and create binder devices.")
+		fmt.Println(probe.Summary())
 	}
 
+	tryModprobeAshmem()
 	return nil
+}
+
+func tryModprobeAshmem() {
+	// Best-effort: some hosts still ship ashmem; ignore errors on memfd-only kernels.
+	_ = exec.Command("modprobe", "ashmem_linux").Run()
+	_ = exec.Command("modprobe", "ashmem").Run()
 }
 
 func (i *Initializer) pullImage() error {

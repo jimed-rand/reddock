@@ -10,9 +10,6 @@ on:
 permissions:
   contents: write
 
-env:
-  APPIMAGE_EXTRACT_AND_RUN: "1"
-
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -48,23 +45,12 @@ jobs:
           cp -f reddock dist/reddock
           chmod +x dist/reddock
 
-      - name: Install appimagecraft and build AppImage
-        run: |
-          chmod +x packaging/write-appimagecraft-yml.sh
-          ./packaging/write-appimagecraft-yml.sh
-          curl -fsSL -o appimagecraft-x86_64.AppImage \
-            https://github.com/TheAssassin/appimagecraft/releases/download/continuous/appimagecraft-x86_64.AppImage
-          chmod +x appimagecraft-x86_64.AppImage
-          ./appimagecraft-x86_64.AppImage build
-          mv -f reddock-x86_64.AppImage "dist/reddock-${VERSION}-x86_64.AppImage"
-
       - name: Upload workflow artifacts
         uses: actions/upload-artifact@v4
         with:
           name: reddock-${{ env.VERSION }}
           path: |
             dist/reddock-${{ env.VERSION }}-linux-amd64.tar.gz
-            dist/reddock-${{ env.VERSION }}-x86_64.AppImage
             dist/reddock
 
       - name: Create GitHub Release
@@ -74,6 +60,5 @@ jobs:
           name: ${{ github.ref_name }} (${{ steps.ver.outputs.version }})
           files: |
             dist/reddock-${{ env.VERSION }}-linux-amd64.tar.gz
-            dist/reddock-${{ env.VERSION }}-x86_64.AppImage
             dist/reddock
           generate_release_notes: true

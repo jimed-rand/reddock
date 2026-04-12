@@ -1,8 +1,7 @@
-.PHONY: help all build static install uninstall clean test fmt vet lint coverage dist dist-pack appimage check-linux run
+.PHONY: help all build static install uninstall clean test fmt vet lint coverage dist dist-pack check-linux run
 
 # Configuration
 BINARY = reddock
-APPIMAGECRAFT ?= .tools/appimagecraft-x86_64.AppImage
 # Dynamic version: total commits (like a build number) + ddmmyy. Override: make build VERSION=42-120426
 GIT_COUNT := $(shell git rev-list --count HEAD 2>/dev/null || echo 0)
 BUILD_DATE := $(shell date +%d%m%y)
@@ -46,7 +45,6 @@ help:
 	@echo "  make static         - Build a static binary (no CGO)"
 	@echo "  make dist           - static + tarball (binary + README + LICENSE)"
 	@echo "  make dist-pack      - tarball only (requires ./$(BINARY) from make static)"
-	@echo "  make appimage       - static + AppImage via appimagecraft (curl, x86_64)"
 	@echo ""
 	@echo "Installation:"
 	@echo "  make install        - Build and install to $(INSTALLED)"
@@ -91,15 +89,6 @@ dist-pack:
 	@mkdir -p dist
 	tar -czf dist/$(BINARY)-$(VERSION)-linux-amd64.tar.gz $(BINARY) README.md LICENSE
 	@echo "Tarball: dist/$(BINARY)-$(VERSION)-linux-amd64.tar.gz"
-
-appimage: check-linux static
-	@mkdir -p .tools dist
-	@chmod +x packaging/write-appimagecraft-yml.sh
-	@./packaging/write-appimagecraft-yml.sh
-	@test -x $(APPIMAGECRAFT) || (curl -fsSL -o $(APPIMAGECRAFT) https://github.com/TheAssassin/appimagecraft/releases/download/continuous/appimagecraft-x86_64.AppImage && chmod +x $(APPIMAGECRAFT))
-	@APPIMAGE_EXTRACT_AND_RUN=1 $(APPIMAGECRAFT) build
-	@mv -f reddock-x86_64.AppImage dist/$(BINARY)-$(VERSION)-x86_64.AppImage
-	@echo "AppImage: dist/$(BINARY)-$(VERSION)-x86_64.AppImage"
 
 run: build
 	./$(BINARY) $(ARGS)
@@ -151,7 +140,5 @@ clean:
 	@echo "Cleaning artifacts..."
 	rm -f $(BINARY)
 	rm -rf dist/ .tools/
-	rm -f reddock-x86_64.AppImage appimagecraft.yml
-	rm -rf .appimagecraft-build-*
 	rm -f coverage.out coverage.html
 	@echo "Done"

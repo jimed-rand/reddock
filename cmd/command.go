@@ -56,8 +56,8 @@ func (c *Command) Execute() error {
 		return c.executePrune()
 	case "version":
 		return c.executeVersion()
-	case "dockerfile":
-		return c.executeDockerfile()
+	case "patch", "redroid-script":
+		return c.executePatch()
 	default:
 		return fmt.Errorf("Unknown command: %s", c.Name)
 	}
@@ -270,107 +270,36 @@ func (c *Command) executePrune() error {
 	return pruner.Prune()
 }
 
-func (c *Command) executeDockerfile() error {
+func (c *Command) executePatch() error {
 	if len(c.Args) < 1 {
-		return fmt.Errorf("Usage: reddock dockerfile <subcommand> <container-name> [options]\n\n" +
-			"Subcommands:\n" +
-			"  show <container>              Show generated Dockerfile\n" +
-			"  edit <container>              Edit Dockerfile with nano\n" +
-			"  build <container> [image]     Build Docker image from Dockerfile\n" +
-			"  commit <container> <image>    Commit running container to new image\n" +
-			"  interactive <container>       Interactive Dockerfile workflow\n" +
-			"  addons <container> [flags]    redroid-script + GPU layer (guest path or --instant cache; see addons usage)")
+		return fmt.Errorf("Usage: reddock patch <container-name> [flags]\n\n" +
+			"Builds a new Docker image from the official ReDroid base using reddock’s native Go port of\n" +
+			"ayasa520/redroid-script (OpenGapps 8.1–14, MindTheGapps 9–15 where packages exist, NDK/Houdini on 10–13, Widevine).\n" +
+			"Requires the container's image_url to be redroid/redroid:… (official images only).\n" +
+			"No Python clone: work happens in a temp directory; downloads go to ~/.cache/redroid/downloads (or XDG_CACHE_HOME).\n" +
+			"Android version defaults from the container image tag when it is official.\n\n" +
+			"Flags (same meaning as the original redroid.py):\n" +
+			"  -a, --android VERSION   Android line (8.1.0 … 14.0.0, *64only); default from image\n" +
+			"  -g, --gapps             OpenGapps (pico; 8.1–14)\n" +
+			"  -lg, --litegapps        LiteGapps\n" +
+			"  -mtg, --mindthegapps    MindTheGapps (8.1 not available; 10/11 not on x86_64 — use -g)\n" +
+			"  -n, --ndk               libndk translation (x86/x86_64; Android 10–13)\n" +
+			"  -i, --houdini           Houdini + Houdini_Hack except on 8.1 (hack skipped there)\n" +
+			"  -m, --magisk            Magisk\n" +
+			"  -w, --widevine          Widevine L3 (only published arch/API combos)\n" +
+			"  -t, --target-image      Final image name (default: reddock-custom:<name>-redroid-script)\n" +
+			"  --script-path DIR       Ignored (kept for compatibility with old scripts)\n" +
+			"  --instant               Ignored (kept for compatibility)\n" +
+			"  --update-config         Set container image_url to the final image in config.json\n\n" +
+			"Examples:\n" +
+			"  sudo reddock patch mybox -g -n -t reddock/mybox:full\n" +
+			"  sudo reddock patch mybox -mtg -w -t reddock/mybox:mtg-wv")
 	}
-
-	subcommand := c.Args[0]
-
-	switch subcommand {
-	case "show":
-		if len(c.Args) < 2 {
-			return fmt.Errorf("Container name is required! Usage: reddock dockerfile show <container-name>")
-		}
-		generator := container.NewDockerfileGenerator(c.Args[1])
-		return generator.Show()
-
-	case "edit":
-		if len(c.Args) < 2 {
-			return fmt.Errorf("Container name is required! Usage: reddock dockerfile edit <container-name>")
-		}
-		generator := container.NewDockerfileGenerator(c.Args[1])
-		return generator.Edit()
-
-	case "build":
-		if len(c.Args) < 2 {
-			return fmt.Errorf("Container name is required! Usage: reddock dockerfile build <container-name> [image-name]\nFormat: Use NAMESPACE/REPOSITORY[:TAG] (Avoid HOST[:PORT]/ for local images)")
-		}
-		containerName := c.Args[1]
-		imageName := fmt.Sprintf("reddock/%s:custom", containerName)
-		if len(c.Args) > 2 {
-			imageName = c.Args[2]
-		}
-		generator := container.NewDockerfileGenerator(containerName)
-		// Save Dockerfile first
-		if err := generator.SaveToFile(generator.GetDockerfilePath()); err != nil {
-			return err
-		}
-		return generator.Build(imageName)
-
-	case "commit":
-		if len(c.Args) < 3 {
-			return fmt.Errorf("Usage: reddock dockerfile commit <container-name> <new-image-name> [message]\nFormat: Use NAMESPACE/REPOSITORY[:TAG] (Avoid HOST[:PORT]/ for local images)")
-		}
-		containerName := c.Args[1]
-		imageName := c.Args[2]
-		message := ""
-		if len(c.Args) > 3 {
-			message = strings.Join(c.Args[3:], " ")
-		}
-		generator := container.NewDockerfileGenerator(containerName)
-		return generator.CommitContainer(imageName, message)
-
-	case "interactive", "i":
-		if len(c.Args) < 2 {
-			return fmt.Errorf("Container name is required! Usage: reddock dockerfile interactive <container-name>")
-		}
-		generator := container.NewDockerfileGenerator(c.Args[1])
-		return generator.Interactive()
-
-	case "addons", "redroid-script":
-		if len(c.Args) < 2 {
-			return fmt.Errorf("Usage: reddock dockerfile addons <container> [flags]\n\n" +
-				"Runs ayasa520/redroid-script then adds the same GPU CMD as `reddock dockerfile build`.\n\n" +
-				"Script source (first match wins): --script-path, REDDOCK_REDROID_SCRIPT, redroid_script_path in config.\n" +
-				"If none of those are set, use --instant (or REDDOCK_REDROID_SCRIPT_INSTANT=1 or redroid_script_instant\n" +
-				"in config) so reddock clones upstream into its cache (~/.config/reddock/cache/redroid-script).\n" +
-				"Android version defaults from the container image when it is official (redroid/redroid:…).\n\n" +
-				"Flags (same meaning as redroid.py):\n" +
-				"  -a, --android VERSION   Android line (8.1.0 … 14.0.0, 12.0.0_64only); default from image\n" +
-				"  -g, --gapps             OpenGapps\n" +
-				"  -lg, --litegapps       LiteGapps\n" +
-				"  -mtg, --mindthegapps   MindTheGapps\n" +
-				"  -n, --ndk              libndk translation\n" +
-				"  -i, --houdini          Houdini\n" +
-				"  -m, --magisk           Magisk\n" +
-				"  -w, --widevine         Widevine L3\n" +
-				"  -t, --target-image     Final image name (default: reddock-custom:<name>-redroid-script)\n" +
-				"  --script-path DIR      Root of your redroid-script clone (guest / reproducible tree)\n" +
-				"  --instant              Use reddock’s cached git clone when no guest path is configured\n" +
-				"  --update-config        Set container image_url to the final image in config.json\n\n" +
-				"Examples:\n" +
-				"  sudo reddock dockerfile addons mybox --script-path ~/src/redroid-script -g -n -t reddock/mybox:full\n" +
-				"  sudo reddock dockerfile addons mybox --instant -g -n -t reddock/mybox:full")
-		}
-		name, flags, err := container.ParseRedroidScriptCLIArgs(c.Args[1:])
-		if err != nil {
-			return err
-		}
-		return container.BuildImageWithRedroidScript(name, flags)
-
-	default:
-		// Backward compatibility: treat first arg as container name for "show"
-		generator := container.NewDockerfileGenerator(subcommand)
-		return generator.Show()
+	name, flags, err := container.ParseRedroidScriptCLIArgs(c.Args)
+	if err != nil {
+		return err
 	}
+	return container.BuildImageWithRedroidScript(name, flags)
 }
 
 func PrintUsage() {
@@ -386,27 +315,16 @@ func PrintUsage() {
 	fmt.Println("  status <n>                  		Show container status (name required)")
 	fmt.Println("  shell <n>                   		Enter container shell (name required)")
 	fmt.Println("  adb-connect <n>             		Show ADB connection command (name required)")
-	fmt.Println("  remove <n> [--image]        		Remove container and data (--image to also remove image)")
-	fmt.Println("  list                           	List all Reddock containers")
+	fmt.Println("  remove <n> [--image]        		Remove container/data (--image to also remove image)")
+	fmt.Println("  list                           	List all Reddock-managed containers")
 	fmt.Println("  log <n>                     		Show container logs (name required)")
 	fmt.Println("  prune                          	Remove unused images")
-	fmt.Println("  dockerfile <cmd> <n> ...       	Dockerfile management (see below)")
+	fmt.Println("  patch <n> [flags]            		Official-image addon build (redroid-script + reddock matrix; see patch usage)")
 	fmt.Println("  version                        	Show version information")
-	fmt.Println("\nDockerfile Subcommands:")
-	fmt.Println("  dockerfile show <n>              	Show generated Dockerfile (name required)")
-	fmt.Println("  dockerfile edit <n>              	Edit Dockerfile with nano (name required)")
-	fmt.Println("  dockerfile build <n> [image]     	Build Docker image from Dockerfile (name required)")
-	fmt.Println("  dockerfile commit <n> <image>    	Commit running container to new image (name and image required)")
-	fmt.Println("  dockerfile interactive <n>       	Interactive Dockerfile workflow (name required)")
-	fmt.Println("  dockerfile addons <n> [flags]    	redroid-script + GPU layer (--script-path or --instant)")
 	fmt.Println("\nExamples:")
 	fmt.Println("  sudo reddock init android13")
 	fmt.Println("  sudo reddock start android13 -v")
 	fmt.Println("  sudo reddock remove android13")
 	fmt.Println("  sudo reddock remove android13 --image  # Also remove Docker image")
-	fmt.Println("\nDockerfile subcommand example:")
-	fmt.Println("  sudo reddock dockerfile edit android13           		# Edit with nano/vim")
-	fmt.Println("  sudo reddock dockerfile build android13 myimage  		# Build the image")
-	fmt.Println("  sudo reddock dockerfile commit android13 myimage  		# Save the container state")
-	fmt.Println("  sudo reddock dockerfile addons android13 --instant -g -n -t my/gapps-ndk")
+	fmt.Println("  sudo reddock patch android13 --instant -g -n -t my/gapps-ndk")
 }

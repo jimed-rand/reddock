@@ -112,19 +112,30 @@ func (r *GenericRuntime) Inspect(containerName string, format string) (string, e
 }
 
 func (r *GenericRuntime) Exists(containerName string) bool {
-	// Implement generic exists check using ps -a or inspect
-	// Using ps -a with filter is robust
-	cmd := r.Command("ps", "-a", "--filter", "name=^"+containerName+"$", "--format", "{{.Names}}")
-	output, _ := cmd.Output()
-	return strings.TrimSpace(string(output)) == containerName
+	// Exact name match via inspect (reliable for Docker and podman-docker; ps --filter name= is engine-specific).
+	cmd := r.Command("inspect", "-f", "{{.Id}}", containerName)
+	output, outErr := cmd.CombinedOutput()
+	matched := outErr == nil && strings.TrimSpace(string(output)) != ""
+	// #region agent log
+	agentDebugLog("runtime.go:Exists", "inspect by name", "H2", map[string]any{
+		"containerName": containerName,
+		"output":        strings.TrimSpace(string(output)),
+		"combinedErr":   fmt.Sprintf("%v", outErr),
+		"matched":       matched,
+	})
+	// #endregion
+	return matched
 }
 
 func (r *GenericRuntime) IsRunning(containerName string) bool {
-	state, err := r.Inspect(containerName, "{{.State.Running}}")
-	if err != nil {
-		return false
+	// Prefer .State.Running; fall back to .State.Status because some engines/templates
+	// have briefly reported mismatches (Status "running" while Running was not "true").
+	running, err := r.Inspect(containerName, "{{.State.Running}}")
+	if err == nil && strings.TrimSpace(running) == "true" {
+		return true
 	}
-	return state == "true"
+	status, err := r.Inspect(containerName, "{{.State.Status}}")
+	return err == nil && strings.TrimSpace(status) == "running"
 }
 
 func (r *GenericRuntime) PruneImages() (string, error) {

@@ -3,6 +3,7 @@ package utils
 import (
 	"fmt"
 	"os/exec"
+	"strings"
 
 	"reddock/pkg/container"
 )
@@ -24,6 +25,11 @@ func (a *AdbManager) ShowConnection() error {
 		return err
 	}
 	if !a.manager.IsRunning() {
+		detail := strings.TrimSpace(a.manager.FormatStoppedDiagnostics())
+		if detail != "" {
+			return fmt.Errorf("The container '%s' is not running. Start it with 'reddock start %s'.\n\n%s",
+				a.containerName, a.containerName, detail)
+		}
 		return fmt.Errorf("The container '%s' is not running. Start it with 'reddock start %s'", a.containerName, a.containerName)
 	}
 

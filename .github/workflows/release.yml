@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Git tag to create and release (must match repo convention), e.g. v0.2.0"
+        description: "Release version / tag (e.g. v2.4.2 or 2.4.2 — stored as v2.4.2 on GitHub)"
         required: true
         type: string
 
@@ -43,15 +43,15 @@ jobs:
             TAG="${{ inputs.tag }}"
             TAG="$(echo "$TAG" | tr -d ' \n\r\t')"
             RAW="${TAG#v}"
-            if [ -z "$RAW" ] || [ "$RAW" = "$TAG" ]; then
-              echo "Tag must use a leading v (e.g. v0.2.0), got: ${{ inputs.tag }}" >&2
+            if [ -z "$RAW" ]; then
+              echo "Empty tag after trim, got: ${{ inputs.tag }}" >&2
               exit 1
             fi
             if ! echo "$RAW" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+([.-][a-zA-Z0-9.-]+)?$'; then
-              echo "Invalid tag: '$TAG' (expected vMAJOR.MINOR.PATCH, e.g. v0.2.0 or v1.0.0-beta.1)" >&2
+              echo "Invalid version: '$TAG' (expected MAJOR.MINOR.PATCH or vMAJOR.MINOR.PATCH, e.g. 2.4.2 or v1.0.0-beta.1)" >&2
               exit 1
             fi
-            VERSION="${TAG}"
+            VERSION="v${RAW}"
           elif [ "${{ github.ref_type }}" = "tag" ]; then
             VERSION="${GITHUB_REF_NAME}"
           else
@@ -65,8 +65,8 @@ jobs:
 
       - name: Static binary and tarball
         run: |
-          make static VERSION="$VERSION"
-          make dist-pack VERSION="$VERSION"
+          make static RELEASE="$VERSION"
+          make dist-pack RELEASE="$VERSION"
 
       - name: Stage standalone binary for upload
         run: |

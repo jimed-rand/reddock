@@ -71,15 +71,21 @@ sudo make install PREFIX=/usr/local
 
 ## Versioning and releases
 
-The **only** canonical release identifier is the **Git tag** on GitHub (`vMAJOR.MINOR.PATCH`, e.g. `v0.2.0`). Release assets and the string from `reddock version` use that tag name—there is no separate version file in the repo.
+GitHub **tags** (`vMAJOR.MINOR.PATCH`) define what is shipped; the binary always reports two strings:
+
+| Field | Meaning |
+| ----- | ------- |
+| **Release** | The public distribution tag (e.g. `v2.4.2`) for builds produced for a GitHub Release. Empty for ad‑hoc local builds. |
+| **Snapshot** | Internal build fingerprint: short git commit SHA plus `-dirty` when the tree is not clean. |
+
+Run `reddock version` to see both. `reddock --help` shows the release tag in the banner when present, otherwise the snapshot.
 
 | How | What happens |
 | --- | ------------ |
-| **Local builds** | `make` embeds whatever `git describe --tags --always --dirty` returns (nearest tag + commits, or commit id if untagged). Falls back to `<commit-count>-<ddmmyy>` without git metadata. Override explicitly: `make static VERSION=v0.2.0`. |
-| **Push tag `v*`** | CI builds with **`VERSION` = tag name** and uploads the release for that tag. |
-| **Actions → Run workflow** | You enter the **same tag name** you want on GitHub (e.g. `v0.2.0`). The workflow creates that **git tag at the current commit** and the matching **GitHub Release**—no duplicate source of truth. |
+| **Local `make`** | Embeds **Snapshot** from git; **Release** unset unless you set `RELEASE=…` (e.g. `make static RELEASE=v0.2.0`). |
+| **Push tag `v*` / Actions workflow** | CI sets **Release** to the tag and **Snapshot** to the commit used for that build. |
 
-To release from your machine without the button: `git tag -a v0.2.0 -m "v0.2.0"` (or lightweight tag), then `git push origin v0.2.0`.
+To release from your machine without the Actions button: `git tag -a v0.2.0 -m "v0.2.0"`, then `git push origin v0.2.0`.
 
 ## Usage
 

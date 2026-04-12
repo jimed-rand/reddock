@@ -374,7 +374,7 @@ func (c *Command) executeDockerfile() error {
 }
 
 func PrintUsage() {
-	fmt.Printf("Reddock %s\n", Version)
+	fmt.Printf("Reddock %s\n", BannerLabel())
 	fmt.Println("\nRequires the Docker CLI (docker) on PATH. If you use Waydroid, note that a running Docker")
 	fmt.Println("daemon can block LXC features Waydroid needs; see messages after init.")
 	fmt.Println("\nUsage: reddock [command] [options]")

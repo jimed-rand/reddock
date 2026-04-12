@@ -2,12 +2,12 @@
 
 # Configuration
 BINARY = reddock
-# Version: override with make VERSION=…
-# Default: git describe from annotated/lightweight tags (matches GitHub tags after push); else <commit-count>-<ddmmyy>
-GIT_COUNT := $(shell git rev-list --count HEAD 2>/dev/null || echo 0)
-BUILD_DATE := $(shell date +%d%m%y)
-GIT_DESC := $(shell git describe --tags --always --dirty 2>/dev/null)
-VERSION ?= $(if $(GIT_DESC),$(GIT_DESC),$(GIT_COUNT)-$(BUILD_DATE))
+# Release = public tag for GitHub builds (e.g. v2.4.2). Snapshot = short SHA + optional -dirty (internal build id).
+GIT_SHA := $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
+GIT_DIRTY := $(shell git diff --quiet 2>/dev/null && git diff --cached --quiet 2>/dev/null || echo -dirty)
+SNAPSHOT ?= $(GIT_SHA)$(GIT_DIRTY)
+RELEASE ?=
+PACK_VERSION := $(if $(RELEASE),$(RELEASE),$(SNAPSHOT))
 OS := $(shell uname -s)
 PREFIX ?= /usr/local
 BINDIR ?= $(PREFIX)/bin
@@ -29,8 +29,8 @@ else
 GO_VERBOSE += -v
 endif
 
-# LDFLAGS for size optimization and version injection
-LDFLAGS = -ldflags "-s -w -X reddock/cmd.Version=$(VERSION)"
+# LDFLAGS: Release (optional) + Snapshot always
+LDFLAGS = -ldflags "-s -w -X reddock/cmd.Release=$(RELEASE) -X reddock/cmd.Snapshot=$(SNAPSHOT)"
 
 check-linux:
 	@if [ "$(OS)" != "Linux" ]; then \
@@ -64,7 +64,8 @@ help:
 	@echo "  make clean          - Remove build artifacts"
 	@echo ""
 	@echo "Variables:"
-	@echo "  VERSION             - Embedded version (git describe from tags, else count+date)"
+	@echo "  RELEASE             - Public release tag for embed + tarball name (e.g. v2.4.2); empty = snapshot-only"
+	@echo "  SNAPSHOT            - Embed as internal build id (default: git short SHA + -dirty if needed)"
 	@echo "  PREFIX              - Installation prefix (default: /usr/local) → bin at PREFIX/bin"
 	@echo "  BINDIR              - Binary directory (default: PREFIX/bin)"
 	@echo "  DESTDIR             - Prepended path for staged installs (e.g. packaging)"
@@ -89,8 +90,8 @@ dist: check-linux static
 dist-pack:
 	@test -f $(BINARY) || (echo "Missing ./$(BINARY); run make static first." && exit 1)
 	@mkdir -p dist
-	tar -cJf dist/$(BINARY)-$(VERSION)-linux-amd64.tar.xz $(BINARY) README.md LICENSE
-	@echo "Tarball: dist/$(BINARY)-$(VERSION)-linux-amd64.tar.xz"
+	tar -cJf dist/$(BINARY)-$(PACK_VERSION)-linux-amd64.tar.xz $(BINARY) README.md LICENSE
+	@echo "Tarball: dist/$(BINARY)-$(PACK_VERSION)-linux-amd64.tar.xz"
 
 run: build
 	./$(BINARY) $(ARGS)

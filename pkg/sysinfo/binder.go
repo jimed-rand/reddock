@@ -135,23 +135,6 @@ func unameRelease() string {
 	return strings.TrimSpace(string(out))
 }
 
-// ParseProcModulesLineNames returns module names from /proc/modules content (for tests).
-func ParseProcModulesLineNames(content string) map[string]bool {
-	names := make(map[string]bool)
-	sc := bufio.NewScanner(strings.NewReader(content))
-	for sc.Scan() {
-		line := sc.Text()
-		if line == "" {
-			continue
-		}
-		fields := strings.Fields(line)
-		if len(fields) > 0 {
-			names[fields[0]] = true
-		}
-	}
-	return names
-}
-
 func procModuleLoaded(name string) bool {
 	f, err := os.Open("/proc/modules")
 	if err != nil {

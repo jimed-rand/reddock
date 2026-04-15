@@ -76,6 +76,7 @@ func (i *Initializer) Initialize() error {
 		return fmt.Errorf("Kernel module check failed: %v", err)
 	}
 	s1.Finish("System requirements met")
+	sysinfo.PrintHostLSMWarnings(os.Stdout, sysinfo.ProbeHostLSM())
 
 	if strings.HasPrefix(i.container.ImageURL, "redroid/redroid:") {
 		fmt.Printf("Pulling official Redroid image %s...\n", i.container.ImageURL)

@@ -119,8 +119,9 @@ func (m *Manager) Start(verbose bool) error {
 		}
 		return fmt.Errorf(
 			"container is not running (docker state: %q, exit code: %s). "+
-				"Check binder (binder_linux /dev/binder* or binderfs /dev/binderfs/*), ashmem/memfd, and image compatibility; see redroid-doc troubleshooting.\n\nLast container logs:\n%s",
-			strings.TrimSpace(st), strings.TrimSpace(exitStr), strings.TrimSpace(logBlock),
+				"Check binder (binder_linux /dev/binder* or binderfs /dev/binderfs/*), ashmem/memfd, and image compatibility; see redroid-doc troubleshooting. "+
+				"If the host uses SELinux (enforcing) or AppArmor, run `reddock status %s` for remediation hints.\n\nLast container logs:\n%s",
+			strings.TrimSpace(st), strings.TrimSpace(exitStr), m.containerName, strings.TrimSpace(logBlock),
 		)
 	}
 

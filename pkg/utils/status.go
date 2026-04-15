@@ -2,6 +2,7 @@ package utils
 
 import (
 	"fmt"
+	"os"
 
 	"reddock/pkg/config"
 	"reddock/pkg/container"
@@ -52,6 +53,11 @@ func (s *StatusManager) Show() error {
 	default:
 		fmt.Println("not detected — install binder_linux (DKMS/KMP) or configure binderfs for this kernel.")
 	}
+
+	lsm := sysinfo.ProbeHostLSM()
+	fmt.Print("\nHost MAC (LSM): ")
+	fmt.Println(lsm.HostLSMStatusLine())
+	sysinfo.PrintHostLSMWarnings(os.Stdout, lsm)
 
 	if !cont.Initialized {
 		fmt.Printf("\nThe container is not initiated. Run 'reddock init %s' first.\n", cont.Name)

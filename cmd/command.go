@@ -56,8 +56,6 @@ func (c *Command) Execute() error {
 		return c.executePrune()
 	case "version":
 		return c.executeVersion()
-	case "patch", "redroid-script":
-		return c.executePatch()
 	default:
 		return fmt.Errorf("Unknown command: %s", c.Name)
 	}
@@ -270,38 +268,6 @@ func (c *Command) executePrune() error {
 	return pruner.Prune()
 }
 
-func (c *Command) executePatch() error {
-	if len(c.Args) < 1 {
-		return fmt.Errorf("Usage: reddock patch <container-name> [flags]\n\n" +
-			"Builds a new Docker image from the official ReDroid base using reddock’s native Go port of\n" +
-			"ayasa520/redroid-script (OpenGapps 8.1–14, MindTheGapps 9–15 where packages exist, NDK/Houdini on 10–13, Widevine).\n" +
-			"Requires the container's image_url to be redroid/redroid:… (official images only).\n" +
-			"No Python clone: work happens in a temp directory; downloads go to ~/.cache/redroid/downloads (or XDG_CACHE_HOME).\n" +
-			"Android version defaults from the container image tag when it is official.\n\n" +
-			"Flags (same meaning as the original redroid.py):\n" +
-			"  -a, --android VERSION   Android line (8.1.0 … 14.0.0, *64only); default from image\n" +
-			"  -g, --gapps             OpenGapps (pico; 8.1–14)\n" +
-			"  -lg, --litegapps        LiteGapps\n" +
-			"  -mtg, --mindthegapps    MindTheGapps (8.1 not available; 10/11 not on x86_64 — use -g)\n" +
-			"  -n, --ndk               libndk translation (x86/x86_64; Android 10–13)\n" +
-			"  -i, --houdini           Houdini + Houdini_Hack except on 8.1 (hack skipped there)\n" +
-			"  -m, --magisk            Magisk\n" +
-			"  -w, --widevine          Widevine L3 (only published arch/API combos)\n" +
-			"  -t, --target-image      Final image name (default: reddock-custom:<name>-redroid-script)\n" +
-			"  --script-path DIR       Ignored (kept for compatibility with old scripts)\n" +
-			"  --instant               Ignored (kept for compatibility)\n" +
-			"  --update-config         Set container image_url to the final image in config.json\n\n" +
-			"Examples:\n" +
-			"  sudo reddock patch mybox -g -n -t reddock/mybox:full\n" +
-			"  sudo reddock patch mybox -mtg -w -t reddock/mybox:mtg-wv")
-	}
-	name, flags, err := container.ParseRedroidScriptCLIArgs(c.Args)
-	if err != nil {
-		return err
-	}
-	return container.BuildImageWithRedroidScript(name, flags)
-}
-
 func PrintUsage() {
 	fmt.Printf("Reddock %s\n", BannerLabel())
 	fmt.Println("\nRequires the Docker CLI (docker) on PATH. If you use Waydroid, note that a running Docker")
@@ -319,12 +285,10 @@ func PrintUsage() {
 	fmt.Println("  list                           	List all Reddock-managed containers")
 	fmt.Println("  log <n>                     		Show container logs (name required)")
 	fmt.Println("  prune                          	Remove unused images")
-	fmt.Println("  patch <n> [flags]            		Official-image addon build (redroid-script + reddock matrix; see patch usage)")
 	fmt.Println("  version                        	Show version information")
 	fmt.Println("\nExamples:")
 	fmt.Println("  sudo reddock init android13")
 	fmt.Println("  sudo reddock start android13 -v")
 	fmt.Println("  sudo reddock remove android13")
 	fmt.Println("  sudo reddock remove android13 --image  # Also remove Docker image")
-	fmt.Println("  sudo reddock patch android13 --instant -g -n -t my/gapps-ndk")
 }
